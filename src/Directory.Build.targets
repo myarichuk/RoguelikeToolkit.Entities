@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <ChangelogFile>$(MSBuildThisFileDirectory)/../CHANGELOG.md</ChangelogFile>
+    <ChangelogFile>$(SolutionDir)CHANGELOG.md</ChangelogFile>
   </PropertyGroup>
   <ItemGroup>
       <PackageReference Include="SIL.ReleaseTasks" Version="*" PrivateAssets="all" />
@@ -8,11 +8,12 @@
 
   <UsingTask TaskName="SetReleaseNotesProperty" AssemblyFile="SIL.ReleaseTasks.dll" />
 
-  <Target Name="AfterBuild">
+  <Target Name="ReleaseNotes" AfterTargets="Pack">
     <PropertyGroup>
       <FilterEntries>true</FilterEntries>
     </PropertyGroup>
-    <SetReleaseNotesProperty ChangelogFile="$(MSBuildThisFileDirectory)/../CHANGELOG.md">
+
+    <SetReleaseNotesProperty ChangelogFile="$(SolutionDir)CHANGELOG.md">
       <Output TaskParameter="Value" PropertyName="ReleaseNotes" />
     </SetReleaseNotesProperty>
   </Target>
