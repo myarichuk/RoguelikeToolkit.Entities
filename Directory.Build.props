@@ -33,10 +33,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="$(MSBuildThisFileDirectory)README.md">
+    <None Include="$(MSBuildThisFileDirectory)README.md">
       <Pack>true</Pack>
-      <PackagePath>README.md</PackagePath>
-    </Content>
+      <PackagePath>/</PackagePath>
+    </None>
   </ItemGroup>
 
   <ItemDefinitionGroup>
