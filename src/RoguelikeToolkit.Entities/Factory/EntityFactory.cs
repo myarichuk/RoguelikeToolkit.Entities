@@ -130,7 +130,7 @@ namespace RoguelikeToolkit.Entities.Factory
 		/// <param name="entity"><see cref="Entity"/> instance - result of the construction</param>
 		/// <returns>true if creation succeeded, false otherwise</returns>
 		/// <exception cref="ArgumentNullException"><paramref name="rootTemplate"/> is <see langword="null"/></exception>
-		public bool TryCreate(EntityTemplate rootTemplate, out Entity entity)
+		internal bool TryCreate(EntityTemplate rootTemplate, out Entity entity)
 		{
 			if (rootTemplate == null)
 			{
