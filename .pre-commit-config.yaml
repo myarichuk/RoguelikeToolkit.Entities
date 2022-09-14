@@ -17,8 +17,6 @@ repos:
     - id: mixed-line-ending
     - id: trailing-whitespace
       args: [--markdown-linebreak-ext=md]
-    - id: pretty-format-json
-      args: ['--autofix']
   - repo: https://github.com/compilerla/conventional-pre-commit
     rev: v2.0.0
     hooks:

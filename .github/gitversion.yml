@@ -4,4 +4,3 @@ major-version-bump-message: "^(build|chore|ci|docs|feat|fix|perf|refactor|refact
 minor-version-bump-message: "^(feat|feature)(\\([\\w\\s-]*\\))?:"
 patch-version-bump-message: "^(build|chore|ci|docs|fix|perf|refactor|revert|refactoring|style|test)(\\([\\w\\s-]*\\))?:"
 commit-message-incrementing: Enabled
-next-version: 4.0.0

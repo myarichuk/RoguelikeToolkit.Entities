@@ -6,4 +6,14 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="DefaultEcs" Version="*" />
+    <PackageReference Include="deniszykov.TypeConversion" Version="*" />
+    <PackageReference Include="fasterflect" Version="*" />
+    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="*" />
+    <PackageReference Include="YamlDotNet" Version="*" />
+    <PackageReference Include="RoguelikeToolkit.Dice" Version="*" />
+    <PackageReference Include="RoguelikeToolkit.Scripts" Version="*" />
+  </ItemGroup>
+
 </Project>

@@ -1,0 +1,22 @@
+{
+	"Components": {
+		"foobar": {
+			"numProperty": 123,
+			"stringProperty": "abcdef"
+		},
+		"barfoo": {
+			"anotherNumProperty": 234,
+			"anotherStringProperty": "defgh"
+		},
+		"foo": "this is a test!"
+	},
+  "Inherits": [
+    "aa",
+    "bb"
+  ],
+  "Tags": [
+    "tag1",
+    "tag2",
+    "tag3"
+  ]
+}
