@@ -1,15 +1,15 @@
 {
-  "ComPoNents": {
-    "barfoo": {
-      "anotherNumProperty": 234,
-      "anotherStringProperty": "defgh"
-    },
-    "foo": "this is a test!",
-    "foobar": {
-      "numProperty": 123,
-      "stringProperty": "abcdef"
-    }
-  },
+	"ComPoNents": {
+		"foobar": {
+			"numProperty": 123,
+			"stringProperty": "abcdef"
+		},
+		"barfoo": {
+			"anotherNumProperty": 234,
+			"anotherStringProperty": "defgh"
+		},
+		"foo": "this is a test!"
+	},
   "TagS": [
     "tag1",
     "tag2",

@@ -1,15 +1,15 @@
 {
-  "Components": {
-    "barfoo": {
-      "anotherNumProperty": 234,
-      "anotherStringProperty": "defgh"
-    },
-    "foo": "this is a test!",
-    "foobar": {
-      "numProperty": 123,
-      "stringProperty": "abcdef"
-    }
-  },
+	"Components": {
+		"foobar": {
+			"numProperty": 123,
+			"stringProperty": "abcdef"
+		},
+		"barfoo": {
+			"anotherNumProperty": 234,
+			"anotherStringProperty": "defgh"
+		},
+		"foo": "this is a test!"
+	},
   "Inherits": [
     "aa",
     "bb"
