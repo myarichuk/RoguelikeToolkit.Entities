@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   build-and-pack:
-    name: Build & Pack
+    name: Build & Test
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
@@ -47,6 +47,7 @@ jobs:
           tag: v${{ steps.gitversion.outputs.AssemblySemVer }}
     outputs:
       tag: v${{ steps.gitversion.outputs.AssemblySemVer }}
+      version: ${{ steps.gitversion.outputs.AssemblySemVer }}
 
   changelog-release:
     name: Update Changelog & Release
@@ -78,6 +79,7 @@ jobs:
           file_pattern: CHANGELOG.md
     outputs:
       tag: v${{ needs.build-and-pack.outputs.tag }}
+      version: v${{ needs.build-and-pack.outputs.version }}
 
   publish-nuget:
     name: Publish (NuGet)
@@ -91,6 +93,6 @@ jobs:
       - name: Git Checkout
         uses: actions/checkout@v3
       - name: Pack NuGet
-        run: dotnet pack --configuration release /p:CI=true -o:package /p:AssemblyVersion=${{needs.changelog-release.outputs.tag}} /p:Version=${{needs.changelog-release.outputs.tag}} /p:PackageVersion=${{needs.changelog-release.outputs.tag}}
+        run: dotnet pack --configuration release /p:CI=true -o:package /p:AssemblyVersion=${{needs.changelog-release.outputs.version}} /p:Version=${{needs.changelog-release.outputs.version}} /p:PackageVersion=${{needs.changelog-release.outputs.version}}
       - name: Publish to NuGet
         run: dotnet nuget push ./package/*.nupkg  -s https://api.nuget.org/v3/index.json  -k ${{ secrets.NUGET_TOKEN }}
