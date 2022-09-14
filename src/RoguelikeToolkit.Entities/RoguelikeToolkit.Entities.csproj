@@ -6,4 +6,12 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="DefaultEcs" Version="*" />
+    <PackageReference Include="deniszykov.TypeConversion" Version="*" />
+    <PackageReference Include="fasterflect" Version="*" />
+    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="*" />
+    <PackageReference Include="YamlDotNet" Version="*" />
+  </ItemGroup>
+
 </Project>
