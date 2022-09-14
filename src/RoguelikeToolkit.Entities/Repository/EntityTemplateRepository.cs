@@ -1,8 +1,4 @@
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Security;
 using RoguelikeToolkit.Entities.Exceptions;
@@ -64,14 +60,14 @@ namespace RoguelikeToolkit.Entities.Repository
 		/// <exception cref="OverflowException">The repository cache contains too many elements.</exception>
 		/// <exception cref="ArgumentNullException"><paramref name="templateName"/> is <see langword="null"/></exception>
 		/// <exception cref="FailedToParseException">Failed to parse the template for any reason.</exception>
-		public void LoadTemplate(string templateName, StreamReader reader, bool ignoreLoadingErrors = false)
+		public void LoadTemplate(string templateName, StreamReader reader)
 		{
 			if (templateName == null)
 			{
 				throw new ArgumentNullException(nameof(templateName));
 			}
 
-			var template = _loader.LoadFrom(reader, ignoreLoadingErrors);
+			var template = _loader.LoadFrom(reader);
 
 			if (!_entityRepository.TryAdd(templateName, template))
 			{
@@ -110,7 +106,7 @@ namespace RoguelikeToolkit.Entities.Repository
 			using var reader = new StreamReader(fs);
 
 			var dot = templateFile.Name.LastIndexOf('.');
-			LoadTemplate(templateFile.Name[..dot], reader, ignoreLoadingErrors);
+			LoadTemplate(templateFile.Name[..dot], reader);
 		}
 
 		/// <exception cref="ArgumentNullException"><paramref name="templateFilename"/> is <see langword="null"/></exception>

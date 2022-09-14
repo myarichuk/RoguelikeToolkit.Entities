@@ -12,6 +12,8 @@
     <PackageReference Include="fasterflect" Version="*" />
     <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="*" />
     <PackageReference Include="YamlDotNet" Version="*" />
+    <PackageReference Include="RoguelikeToolkit.Dice" Version="*" />
+    <PackageReference Include="RoguelikeToolkit.Scripts" Version="*" />
   </ItemGroup>
 
 </Project>
