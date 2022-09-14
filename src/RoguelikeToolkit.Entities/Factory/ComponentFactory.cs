@@ -4,8 +4,10 @@ using System.Runtime.CompilerServices;
 using deniszykov.TypeConversion;
 using Fasterflect;
 using Microsoft.Extensions.Options;
+using RoguelikeToolkit.DiceExpression;
 using RoguelikeToolkit.Entities.Components;
 using RoguelikeToolkit.Entities.Extensions;
+using RoguelikeToolkit.Scripts;
 using static deniszykov.TypeConversion.ConversionOptions;
 
 namespace RoguelikeToolkit.Entities.Factory
@@ -33,10 +35,30 @@ namespace RoguelikeToolkit.Entities.Factory
 		/// </summary>
 		public ComponentFactory()
 		{
-			// _typeConversionProvider.RegisterConversion<string, Dice>(
-			//  (src, _, __) =>
-			//      Dice.Parse(src, true),
-			//  ConversionQuality.Custom);
+			_typeConversionProvider.RegisterConversion<string, Dice>(
+				(src, _, __) =>
+					Dice.Parse(src, true),
+				ConversionQuality.Custom);
+
+			_typeConversionProvider.RegisterConversion<string, EntityScript>(
+				(src, _, __) =>
+					new EntityScript(src),
+				ConversionQuality.Custom);
+
+			_typeConversionProvider.RegisterConversion<string, EntityComponentScript>(
+				(src, _, __) =>
+					new EntityComponentScript(src),
+				ConversionQuality.Custom);
+
+			_typeConversionProvider.RegisterConversion<string, EntityInteractionScript>(
+				(src, _, __) =>
+					new EntityInteractionScript(src),
+				ConversionQuality.Custom);
+
+			_typeConversionProvider.RegisterConversion<string, Script>(
+				(src, _, __) =>
+					new Script(src),
+				ConversionQuality.Custom);
 		}
 
 		/// <summary>

@@ -85,7 +85,7 @@ namespace RoguelikeToolkit.Entities.Repository
 		/// <exception cref="OverflowException">The repository cache contains too many elements.</exception>
 		/// <exception cref="TemplateAlreadyExistsException">Template with specified name already exists.</exception>
 		/// <exception cref="FailedToParseException">Failed to parse the template for any reason.</exception>
-		public void LoadTemplate(FileInfo templateFile, bool ignoreLoadingErrors = false)
+		public void LoadTemplate(FileInfo templateFile)
 		{
 			if (templateFile == null)
 			{
@@ -121,14 +121,14 @@ namespace RoguelikeToolkit.Entities.Repository
 		/// <exception cref="InvalidOperationException">Template files must have either 'yaml' or 'json' extensions</exception>
 		/// <exception cref="FailedToParseException">Failed to parse the template for any reason.</exception>
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public void LoadTemplate(string templateFilename, bool ignoreLoadingErrors = false)
+		public void LoadTemplate(string templateFilename)
 		{
 			if (templateFilename == null)
 			{
 				throw new ArgumentNullException(nameof(templateFilename));
 			}
 
-			LoadTemplate(new FileInfo(templateFilename), ignoreLoadingErrors);
+			LoadTemplate(new FileInfo(templateFilename));
 		}
 
 		/// <exception cref="SecurityException">The caller does not have the required permission for the repository folder.</exception>
@@ -144,7 +144,7 @@ namespace RoguelikeToolkit.Entities.Repository
 		/// <exception cref="ArgumentException">If .NET Framework and .NET Core versions older than 2.1: <paramref name="path" /> contains invalid characters such as ", &lt;, &gt;, or |.</exception>
 		/// <exception cref="FailedToParseException">Failed to parse the template for any reason.</exception>
 		/// <exception cref="InvalidOperationException">Template files must have either 'yaml' or 'json' extensions</exception>
-		public void LoadTemplateFolder(string templateFolder, bool ignoreLoadingErrors = false)
+		public void LoadTemplateFolder(string templateFolder)
 		{
 			if (templateFolder == null)
 			{
@@ -159,7 +159,7 @@ namespace RoguelikeToolkit.Entities.Repository
 
 			foreach (var fi in EnumerateTemplateFiles(di))
 			{
-				LoadTemplate(fi, ignoreLoadingErrors);
+				LoadTemplate(fi);
 			}
 
 			static IEnumerable<FileInfo> EnumerateTemplateFiles(DirectoryInfo di) =>

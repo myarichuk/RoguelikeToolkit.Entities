@@ -148,7 +148,8 @@ internal class EntityTemplateLoader
 		template = new EntityTemplate();
 		failureReason = null;
 
-		foreach (var kvp in rawTemplateData)
+		// ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
+		foreach (var kvp in rawTemplateData ?? Enumerable.Empty<KeyValuePair<string, object>>())
 		{
 			if (EntityTemplate.PropertyNames.TryGetValue(kvp.Key, out var properlyCasedPropertyName))
 			{
