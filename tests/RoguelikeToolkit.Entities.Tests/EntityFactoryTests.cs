@@ -54,7 +54,7 @@ namespace RoguelikeToolkit.Entities.Tests
 
 		public EntityFactoryTests()
 		{
-			_templateRepository.LoadTemplateFolder("TemplatesForLoading", ignoreLoadingErrors: true);
+			_templateRepository.LoadTemplateFolder("TemplatesForEntityFactory");
 			_entityFactory = new EntityFactory(_templateRepository, new World());
 		}
 

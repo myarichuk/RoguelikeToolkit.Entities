@@ -28,7 +28,7 @@ namespace RoguelikeToolkit.Entities.Tests
 		{
 			string currentFolder = new FileInfo(Assembly.GetExecutingAssembly().Location).DirectoryName;
 			var path = Path.Combine(currentFolder, "FolderForTemplateRepository", templateFilename);
-			Assert.Throws<InvalidOperationException>(() => _repository.LoadTemplate(path, false));
+			Assert.Throws<InvalidOperationException>(() => _repository.LoadTemplate(path));
 		}
 
 		[Fact]
