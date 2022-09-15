@@ -176,8 +176,7 @@ namespace RoguelikeToolkit.Entities.Factory
 				}
 
 				var rawComponentType = componentRawData.Value.GetType();
-				object? componentInstance = null;
-				componentInstance = CreateComponentInstance(rawComponentType, componentType, componentRawData);
+				var componentInstance = CreateComponentInstance(rawComponentType, componentType, componentRawData);
 
 				if (IsGlobalComponent(componentType))
 				{
@@ -206,14 +205,16 @@ namespace RoguelikeToolkit.Entities.Factory
 		private void SetGlobalComponentInEntity(in Entity entity, Type componentType, object componentInstance)
 		{
 			var genericWorldHasMethod =
-				WorldHasMethodCache.GetOrAdd(componentType, type => (WorldHasMethod ?? throw new InvalidOperationException($"failed to create method delegate ({nameof(WorldHasMethod)}")).MakeGenericMethod(type));
+				WorldHasMethodCache.GetOrAdd(
+					componentType,
+					type => (WorldHasMethod ?? throw new InvalidOperationException($"failed to create method delegate ({nameof(WorldHasMethod)}")).MakeGenericMethod(type));
 
 			var hasSuchComponent = (bool)genericWorldHasMethod.Call(_world);
 			if (!hasSuchComponent)
 			{
 				var genericWorldSetMethod = WorldSetMethodCache.GetOrAdd(
 					componentType,
-					type => WorldSetMethod.MakeGenericMethod(type));
+					type => (WorldSetMethod ?? throw new InvalidOperationException($"failed to create method delegate ({nameof(WorldSetMethod)})")).MakeGenericMethod(type));
 
 				genericWorldSetMethod.Call(
 					_world,
@@ -222,7 +223,7 @@ namespace RoguelikeToolkit.Entities.Factory
 
 			var genericSetSameAsWorldMethod = EntitySetSameAsWorldMethodCache.GetOrAdd(
 				componentType,
-				type => (EntitySetSameAsWorldMethod ?? throw new InvalidOperationException($"failed to create method delegate ({nameof(EntitySetSameAsWorldMethod)}")).MakeGenericMethod(type));
+				type => (EntitySetSameAsWorldMethod ?? throw new InvalidOperationException($"failed to create method delegate ({nameof(EntitySetSameAsWorldMethod)})")).MakeGenericMethod(type));
 
 			genericSetSameAsWorldMethod.Call(entity.WrapIfValueType());
 		}
@@ -232,12 +233,6 @@ namespace RoguelikeToolkit.Entities.Factory
 			object? componentInstance;
 			if (componentRawType.IsValueType || componentRawType.Name == nameof(String))
 			{
-				if (!componentType.IsValueComponentType())
-				{
-					throw new InvalidOperationException(
-						"Cannot set value type component with incompatible type. The component type must inherit from IValueComponent<TValue>");
-				}
-
 				// TODO: refactor for better error handling
 				if (!_componentFactory.TryCreateInstance(componentType, componentRawData.Value, out componentInstance))
 				{

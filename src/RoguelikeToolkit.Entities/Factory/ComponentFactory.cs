@@ -17,13 +17,7 @@ namespace RoguelikeToolkit.Entities.Factory
 	/// </summary>
 	internal class ComponentFactory
 	{
-		private static readonly MethodInfo? CreateInstanceMethodNonGeneric =
-			typeof(ComponentFactory).Methods()
-				.FirstOrDefault(m => m.Name == nameof(TryCreateInstance));
-
 		private readonly ConcurrentDictionary<Type, IList<PropertyInfo>> _typePropertyCache = new();
-		private readonly ConcurrentDictionary<Type, Type[]> _createInstanceGenericsCache = new();
-		private readonly ConcurrentDictionary<Type, MethodInfo> _createInstanceMethodCache = new();
 
 		private readonly TypeConversionProvider _typeConversionProvider = new(Options.Create(new TypeConversionProviderOptions
 		{
@@ -129,8 +123,6 @@ namespace RoguelikeToolkit.Entities.Factory
 		/// <param name="objectData">Property data, typically received from YamlDotNet deserialization</param>
 		/// <param name="instance">resulting instance of the component</param>
 		/// <returns>true if instance creation succeeded, false otherwise</returns>
-		/// <exception cref="ArgumentNullException"><paramref name="objectData"/> is <see langword="null"/></exception>
-		/// <exception cref="ArgumentException">The type implements <see cref="IValueComponent{TValue}"/>, use the other overload for correct functionality.</exception>
 		public bool TryCreateInstance<TComponent>(IReadOnlyDictionary<object, object> objectData, out TComponent instance)
 		{
 			var success = TryCreateInstance(typeof(TComponent), objectData, out var instanceAsObject);
