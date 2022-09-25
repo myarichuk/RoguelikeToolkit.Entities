@@ -2,9 +2,15 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.3.32825.248
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RoguelikeToolkit.Entities", "src\RoguelikeToolkit.Entities\RoguelikeToolkit.Entities.csproj", "{AA6E5513-F4A3-4642-AC51-0327A0F9E7C4}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RoguelikeToolkit.Entities", "src\RoguelikeToolkit.Entities\RoguelikeToolkit.Entities.csproj", "{AA6E5513-F4A3-4642-AC51-0327A0F9E7C4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RoguelikeToolkit.Entities.Tests", "tests\RoguelikeToolkit.Entities.Tests\RoguelikeToolkit.Entities.Tests.csproj", "{98A9E87D-8A55-4BC0-AEA3-DD9F20E6A66F}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RoguelikeToolkit.Entities.Tests", "tests\RoguelikeToolkit.Entities.Tests\RoguelikeToolkit.Entities.Tests.csproj", "{98A9E87D-8A55-4BC0-AEA3-DD9F20E6A66F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{222FFFD2-D7D9-4951-BCF2-BD1684B01EBC}"
+	ProjectSection(SolutionItems) = preProject
+		.pre-commit-config.yaml = .pre-commit-config.yaml
+		global.json = global.json
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
