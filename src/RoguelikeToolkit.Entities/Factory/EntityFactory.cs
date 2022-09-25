@@ -93,9 +93,15 @@ namespace RoguelikeToolkit.Entities.Factory
             // ReSharper disable once ExceptionNotDocumented (we make sure in code that TryGet template doesn't throw)
             var effectiveRootTemplate = _inheritanceResolver.GetEffectiveTemplate(rootTemplate);
 
-            var graphIterator = new EmbeddedTemplateGraphIterator(effectiveRootTemplate);
+            CreateEntity(effectiveRootTemplate, out var rootEntity);
+            entity = CreateChildEntities(effectiveRootTemplate, rootEntity);
 
-            ConstructEntity(effectiveRootTemplate, out var rootEntity);
+            return true;
+        }
+
+        private Entity CreateChildEntities(EntityTemplate effectiveRootTemplate, Entity rootEntity)
+        {
+            var graphIterator = new EmbeddedTemplateGraphIterator(effectiveRootTemplate);
 
             graphIterator.Traverse(template =>
             {
@@ -111,13 +117,11 @@ namespace RoguelikeToolkit.Entities.Factory
                 }
             });
 
-            entity = rootEntity;
-
-            return true;
+            return rootEntity;
         }
 
         // TODO: refactor to reduce cognitive complexity
-        private void ConstructEntity(EntityTemplate template, out Entity entity)
+        private void CreateEntity(EntityTemplate template, out Entity entity)
         {
             entity = _world.CreateEntity();
 
