@@ -65,7 +65,7 @@ namespace RoguelikeToolkit.Entities.Factory
         /// <returns>true if instance creation succeeded, false otherwise</returns>
         /// <remarks>This overload is intended for value-type components</remarks>
         /// <exception cref="ArgumentNullException"><paramref name="objectData"/> is <see langword="null"/></exception>
-        public bool TryCreateInstance(Type componentType, object objectData, out object? instance)
+        public bool TryCreateValueInstance(Type componentType, object objectData, out object? instance)
         {
             ValidateValueComponentInputThrowIfNeeded(componentType, objectData);
 
@@ -96,7 +96,7 @@ namespace RoguelikeToolkit.Entities.Factory
         /// <param name="instance">resulting instance of the component</param>
         /// <returns>true if instance creation succeeded, false otherwise</returns>
         /// <remarks>This overload is intended for object components with properties</remarks>
-        public bool TryCreateInstance(Type componentType, IReadOnlyDictionary<object, object> objectData, out object? instance)
+        public bool TryCreateReferenceInstance(Type componentType, IReadOnlyDictionary<object, object> objectData, out object? instance)
         {
             ValidateNonValueComponentInputThrowIfNeeded(componentType, objectData);
 
@@ -125,7 +125,7 @@ namespace RoguelikeToolkit.Entities.Factory
         /// <returns>true if instance creation succeeded, false otherwise</returns>
         public bool TryCreateInstance<TComponent>(IReadOnlyDictionary<object, object> objectData, out TComponent instance)
         {
-            var success = TryCreateInstance(typeof(TComponent), objectData, out var instanceAsObject);
+            var success = TryCreateReferenceInstance(typeof(TComponent), objectData, out var instanceAsObject);
             instance = (TComponent)instanceAsObject!;
             return success;
         }
@@ -168,7 +168,7 @@ namespace RoguelikeToolkit.Entities.Factory
                 return true;
             }
 
-            // note: ConvertValueFromSrcToDestType() can call recursively to this method (TryCreateInstance)
+            // note: ConvertValueFromSrcToDestType() can call recursively to this method (TryCreateValueInstance)
             if (!instanceAsObject.TrySetPropertyValue(
                     property!.Name,
                     ConvertValueFromSrcToDestType(
@@ -189,7 +189,7 @@ namespace RoguelikeToolkit.Entities.Factory
             {
                 case Dictionary<object, object> valueAsDictionary:
                     {
-                        TryCreateInstance(destType, valueAsDictionary, out convertResult);
+                        TryCreateReferenceInstance(destType, valueAsDictionary, out convertResult);
                         break;
                     }
 

@@ -1,4 +1,5 @@
 using System.Reflection;
+using RoguelikeToolkit.Entities.Components;
 
 namespace RoguelikeToolkit.Entities.Extensions
 {

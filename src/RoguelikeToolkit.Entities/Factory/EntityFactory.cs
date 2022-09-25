@@ -1,9 +1,6 @@
-using System.Collections.Concurrent;
 using System.Reflection;
 using DefaultEcs;
-using deniszykov.TypeConversion;
 using Fasterflect;
-using Microsoft.Extensions.Options;
 using RoguelikeToolkit.Entities.Exceptions;
 using RoguelikeToolkit.Entities.Extensions;
 using RoguelikeToolkit.Entities.Repository;
@@ -15,37 +12,12 @@ namespace RoguelikeToolkit.Entities.Factory
     /// </summary>
     public class EntityFactory
     {
-        private static readonly ConcurrentDictionary<Type, MethodInfo> EntitySetMethodCache = new();
-        private static readonly ConcurrentDictionary<Type, MethodInfo> EntitySetSameAsWorldMethodCache = new();
-        private static readonly ConcurrentDictionary<Type, MethodInfo> WorldSetMethodCache = new();
-        private static readonly ConcurrentDictionary<Type, MethodInfo> WorldHasMethodCache = new();
-
-        private static readonly MethodInfo? EntitySetMethod =
-            typeof(Entity).Methods(nameof(Entity.Set))
-                .FirstOrDefault(m => m.Parameters().Count == 1);
-
-        private static readonly MethodInfo? EntitySetSameAsWorldMethod =
-            typeof(Entity).Methods(nameof(Entity.SetSameAsWorld))
-                .FirstOrDefault();
-
-        private static readonly MethodInfo? WorldSetMethod =
-            typeof(World).Methods(nameof(World.Set))
-                .FirstOrDefault(m => m.Parameters().Count == 1);
-
-        private static readonly MethodInfo? WorldHasMethod =
-            typeof(World).Methods(nameof(World.Has))
-                .FirstOrDefault();
-
         private readonly EntityTemplateRepository _entityRepository;
         private readonly ComponentFactory _componentFactory = new();
         private readonly ComponentTypeRegistry _componentTypeRegistry = new();
         private readonly EntityInheritanceResolver _inheritanceResolver;
         private readonly World _world;
-
-        private readonly TypeConversionProvider _typeConversionProvider = new(Options.Create(new TypeConversionProviderOptions
-        {
-            Options = ConversionOptions.UseDefaultFormatIfNotSpecified,
-        }));
+        private readonly IReadOnlyList<BaseComponentInEntitySetter> _componentInEntitySetters;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="EntityFactory"/> class
@@ -53,37 +25,18 @@ namespace RoguelikeToolkit.Entities.Factory
         /// <param name="entityRepository">template repository that is used to fetch entity templates as needed</param>
         /// <param name="world">DefaultEcs <see cref="World"/> object that creates the <see cref="Entity"/> instances themselves</param>
         /// <exception cref="ArgumentNullException">entityRepository or world parameter is null.</exception>
-        /// <exception cref="InvalidOperationException">Failed to detect Entity::Set(ref T param) method, this probably means DefaultEcs was updated and had a breaking change. This is not supposed to happen.</exception>
         public EntityFactory(EntityTemplateRepository entityRepository, World world)
         {
             _entityRepository = entityRepository ?? throw new ArgumentNullException(nameof(entityRepository));
             _world = world ?? throw new ArgumentNullException(nameof(world));
             _inheritanceResolver = new EntityInheritanceResolver(_entityRepository.TryGetByName);
 
-            // sanity check
-            if (EntitySetMethod == null)
-            {
-                throw new InvalidOperationException(
-                    "Failed to detect Entity::Set<T>(ref T param) method, this probably means DefaultEcs was updated and had a breaking change. This is not supposed to happen and should be reported");
-            }
-
-            if (EntitySetSameAsWorldMethodCache == null)
-            {
-                throw new InvalidOperationException(
-                    "Failed to detect Entity::SetSameAsWorld<T>() method, this probably means DefaultEcs was updated and had a breaking change. This is not supposed to happen and should be reported");
-            }
-
-            if (WorldSetMethod == null)
-            {
-                throw new InvalidOperationException(
-                    "Failed to detect World::Set<T>(ref T param) method, this probably means DefaultEcs was updated and had a breaking change. This is not supposed to happen and should be reported");
-            }
-
-            if (WorldHasMethod == null)
-            {
-                throw new InvalidOperationException(
-                    "Failed to detect World::Has<T>() method, this probably means DefaultEcs was updated and had a breaking change. This is not supposed to happen and should be reported");
-            }
+            var componentInEntitySetterTypes = Assembly.GetExecutingAssembly().TypesImplementing<BaseComponentInEntitySetter>();
+            _componentInEntitySetters =
+                componentInEntitySetterTypes
+                    .Select(type =>
+                        (BaseComponentInEntitySetter)Activator.CreateInstance(type, world)!)
+                    .ToList();
         }
 
         /// <summary>
@@ -137,6 +90,7 @@ namespace RoguelikeToolkit.Entities.Factory
                 throw new ArgumentNullException(nameof(rootTemplate));
             }
 
+            // ReSharper disable once ExceptionNotDocumented (we make sure in code that TryGet template doesn't throw)
             var effectiveRootTemplate = _inheritanceResolver.GetEffectiveTemplate(rootTemplate);
 
             var graphIterator = new EmbeddedTemplateGraphIterator(effectiveRootTemplate);
@@ -169,72 +123,46 @@ namespace RoguelikeToolkit.Entities.Factory
 
             foreach (var componentRawData in template.Components)
             {
-                if (!_componentTypeRegistry.TryGetComponentType(componentRawData.Key, out var componentType))
-                {
-                    throw new InvalidOperationException(
-                        $"Component type '{componentRawData.Key}' is not registered. Check the spelling of the component name in the template.");
-                }
+                var componentType = GetComponentTypeOrThrow(componentRawData);
 
                 var rawComponentType = componentRawData.Value.GetType();
                 var componentInstance = CreateComponentInstance(rawComponentType, componentType, componentRawData);
 
-                if (IsGlobalComponent(componentType))
+                foreach (var componentSetter in _componentInEntitySetters)
                 {
-                    SetGlobalComponentInEntity(entity, componentType, componentInstance);
+                    if (componentSetter.CanSetComponent(componentType))
+                    {
+                        componentSetter.SetComponent(entity, componentType, componentInstance);
+                        break;
+                    }
                 }
-                else
-                {
-                    SetRegularComponentInEntity(entity, componentType, componentInstance);
-                }
-
-                bool IsGlobalComponent(Type type) =>
-                    type.HasAttribute<ComponentAttribute>() && type.Attribute<ComponentAttribute>().IsGlobal;
             }
         }
 
-        private void SetRegularComponentInEntity(in Entity entity, Type componentType, object componentInstance)
+        private Type GetComponentTypeOrThrow(KeyValuePair<string, object> componentRawData)
         {
-            var genericEntitySetMethod =
-                EntitySetMethodCache.GetOrAdd(componentType, type => (EntitySetMethod ?? throw new InvalidOperationException($"failed to create method delegate ({nameof(EntitySetMethod)}")).MakeGenericMethod(type));
-
-            genericEntitySetMethod.Call(
-                entity.WrapIfValueType(),
-                _typeConversionProvider.Convert(typeof(object), componentType, componentInstance));
-        }
-
-        private void SetGlobalComponentInEntity(in Entity entity, Type componentType, object componentInstance)
-        {
-            var genericWorldHasMethod =
-                WorldHasMethodCache.GetOrAdd(
-                    componentType,
-                    type => (WorldHasMethod ?? throw new InvalidOperationException($"failed to create method delegate ({nameof(WorldHasMethod)}")).MakeGenericMethod(type));
-
-            var hasSuchComponent = (bool)genericWorldHasMethod.Call(_world);
-            if (!hasSuchComponent)
+            if (!_componentTypeRegistry.TryGetComponentType(componentRawData.Key, out var componentType))
             {
-                var genericWorldSetMethod = WorldSetMethodCache.GetOrAdd(
-                    componentType,
-                    type => (WorldSetMethod ?? throw new InvalidOperationException($"failed to create method delegate ({nameof(WorldSetMethod)})")).MakeGenericMethod(type));
-
-                genericWorldSetMethod.Call(
-                    _world,
-                    _typeConversionProvider.Convert(typeof(object), componentType, componentInstance));
+                throw new InvalidOperationException(
+                    $"Component type '{componentRawData.Key}' is not registered. Check the spelling of the component name in the template.");
             }
 
-            var genericSetSameAsWorldMethod = EntitySetSameAsWorldMethodCache.GetOrAdd(
-                componentType,
-                type => (EntitySetSameAsWorldMethod ?? throw new InvalidOperationException($"failed to create method delegate ({nameof(EntitySetSameAsWorldMethod)})")).MakeGenericMethod(type));
+            if (componentType == null)
+            {
+                throw new InvalidOperationException(
+                    "A value in internal cache is null and this is supposed to happen. This is likely a bug.");
+            }
 
-            genericSetSameAsWorldMethod.Call(entity.WrapIfValueType());
+            return componentType;
         }
 
-        private object? CreateComponentInstance(Type componentRawType, Type componentType, KeyValuePair<string, object> componentRawData)
+        private object CreateComponentInstance(Type componentRawType, Type componentType, KeyValuePair<string, object> componentRawData)
         {
             object? componentInstance;
             if (componentRawType.IsValueType || componentRawType.Name == nameof(String))
             {
                 // TODO: refactor for better error handling
-                if (!_componentFactory.TryCreateInstance(componentType, componentRawData.Value, out componentInstance))
+                if (!_componentFactory.TryCreateValueInstance(componentType, componentRawData.Value, out componentInstance))
                 {
                     throw new InvalidOperationException(
                         $"Failed to create an instance of a component (type = {componentType.FullName})");
@@ -249,14 +177,15 @@ namespace RoguelikeToolkit.Entities.Factory
                 }
 
                 // TODO: refactor for better error handling
-                if (!_componentFactory.TryCreateInstance(componentType, componentObjectData, out componentInstance))
+                if (!_componentFactory.TryCreateReferenceInstance(componentType, componentObjectData, out componentInstance))
                 {
                     throw new InvalidOperationException(
                         $"Failed to create an instance of a component (type = {componentType.FullName})");
                 }
             }
 
-            return componentInstance;
+            return componentInstance ?? throw new InvalidOperationException(
+                "Failed to create component instance. This is not supposed to happen and is likely a bug.");
         }
     }
 }
