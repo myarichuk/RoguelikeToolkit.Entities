@@ -19,7 +19,7 @@
     <PackageReference Include="deniszykov.TypeConversion" Version="*" />
     <PackageReference Include="fasterflect" Version="*" />
     <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="*" />
-    <PackageReference Include="ObjectTreeWalker" Version="0.7.1" />
+    <PackageReference Include="ObjectTreeWalker" Version="0.8.2" />
     <PackageReference Include="YamlDotNet" Version="*" />
     <PackageReference Include="RoguelikeToolkit.Dice" Version="*" />
     <PackageReference Include="RoguelikeToolkit.Scripts" Version="*" />
