@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using deniszykov.TypeConversion;
 using Fasterflect;
 using Microsoft.Extensions.Options;
+using ObjectTreeWalker;
 using RoguelikeToolkit.DiceExpression;
 using RoguelikeToolkit.Entities.Components;
 using RoguelikeToolkit.Entities.Extensions;
@@ -18,6 +19,7 @@ namespace RoguelikeToolkit.Entities.Factory
     internal class ComponentFactory
     {
         private readonly ConcurrentDictionary<Type, IList<PropertyInfo>> _typePropertyCache = new();
+        private readonly ObjectMemberIterator _memberIterator = new();
 
         private readonly TypeConversionProvider _typeConversionProvider = new(Options.Create(new TypeConversionProviderOptions
         {
@@ -99,20 +101,69 @@ namespace RoguelikeToolkit.Entities.Factory
         public bool TryCreateReferenceInstance(Type componentType, IReadOnlyDictionary<object, object> objectData, out object? instance)
         {
             ValidateNonValueComponentInputThrowIfNeeded(componentType, objectData);
-
             instance = default;
             var instanceAsObject = CreateEmptyInstance(componentType);
 
-            foreach (var kvp in objectData)
-            {
-                if (!TrySetPropertyValue(componentType, kvp, instanceAsObject))
+            _memberIterator.Traverse(
+                instanceAsObject,
+                (in MemberAccessor accessor) =>
                 {
-                    return false;
-                }
-            }
+                    var memberName = accessor.Name;
+
+                    var relevantPair = GetRelevantPair(accessor.PropertyPath, memberName, objectData);
+
+                    if (relevantPair.Value != null)
+                    {
+                        var convertedValue = ConvertValueFromSrcToDestType(
+                            relevantPair.Value,
+                            accessor.Type);
+                        if (convertedValue != null)
+                        {
+                            accessor.SetValue(convertedValue);
+                        }
+                    }
+                },
+                (in MemberAccessor accessor) => accessor.MemberType == MemberType.Property);
 
             instance = instanceAsObject.UnwrapIfWrapped();
             return true;
+
+            KeyValuePair<object, object> GetRelevantPair(
+                IEnumerable<string> propertyPath,
+                string memberName,
+                IReadOnlyDictionary<object, object> objectData)
+            {
+                if (!propertyPath.Any())
+                {
+                    return objectData.FirstOrDefault(kvp =>
+                        string.Equals((string)kvp.Key, memberName, StringComparison.InvariantCultureIgnoreCase));
+                }
+
+                var currentObjectData = objectData;
+
+                foreach (var pathElement in propertyPath)
+                {
+                    var subElement = currentObjectData!.FirstOrDefault(x =>
+                        string.Equals(x.Key as string, pathElement, StringComparison.InvariantCultureIgnoreCase));
+
+                    if (subElement.Value is IReadOnlyDictionary<object, object> subObject)
+                    {
+                        if (propertyPath.Last() == pathElement)
+                        {
+                            return subElement;
+                        }
+
+                        currentObjectData = subObject;
+                    }
+                    else
+                    {
+                        return subElement;
+                    }
+                }
+
+                return currentObjectData.FirstOrDefault(kvp =>
+                    string.Equals((string)kvp.Key, memberName, StringComparison.InvariantCultureIgnoreCase));
+            }
         }
 
         /// <summary>
@@ -123,7 +174,7 @@ namespace RoguelikeToolkit.Entities.Factory
         /// <param name="objectData">Property data, typically received from YamlDotNet deserialization</param>
         /// <param name="instance">resulting instance of the component</param>
         /// <returns>true if instance creation succeeded, false otherwise</returns>
-        public bool TryCreateInstance<TComponent>(IReadOnlyDictionary<object, object> objectData, out TComponent instance)
+        public bool TryCreateReferenceInstance<TComponent>(IReadOnlyDictionary<object, object> objectData, out TComponent instance)
         {
             var success = TryCreateReferenceInstance(typeof(TComponent), objectData, out var instanceAsObject);
             instance = (TComponent)instanceAsObject!;
