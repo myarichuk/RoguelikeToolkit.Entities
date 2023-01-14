@@ -30,7 +30,7 @@ public class ComponentFactoryTests
     {
         // sanity check
         Assert.True(_repository.TryGetByName("simple-template", out var template));
-        Assert.True(_componentFactory.TryCreateInstance<Foobar>(
+        Assert.True(_componentFactory.TryCreateReferenceInstance<Foobar>(
             template.Components["foobar"] as Dictionary<object, object>, out var componentInstance));
 
         Assert.Equal(123, componentInstance.NumProperty);
@@ -42,7 +42,7 @@ public class ComponentFactoryTests
     {
         // sanity check
         Assert.True(_repository.TryGetByName("simple-template", out var template));
-        Assert.True(_componentFactory.TryCreateInstance<FoobarStruct>(
+        Assert.True(_componentFactory.TryCreateReferenceInstance<FoobarStruct>(
             template.Components["foobar"] as Dictionary<object, object>, out var componentInstance));
 
         Assert.Equal(123, componentInstance.NumProperty);
@@ -54,7 +54,7 @@ public class ComponentFactoryTests
     {
         // sanity check
         Assert.True(_repository.TryGetByName("simple-template", out var template));
-        Assert.True(_componentFactory.TryCreateInstance<FoobarRecordStruct>(
+        Assert.True(_componentFactory.TryCreateReferenceInstance<FoobarRecordStruct>(
             template.Components["foobar"] as Dictionary<object, object>, out var componentInstance));
 
         Assert.Equal(123, componentInstance.NumProperty);
@@ -66,7 +66,7 @@ public class ComponentFactoryTests
     {
         // sanity check
         Assert.True(_repository.TryGetByName("simple-template-with-dice", out var template));
-        Assert.True(_componentFactory.TryCreateInstance<DiceComponent>(
+        Assert.True(_componentFactory.TryCreateReferenceInstance<DiceComponent>(
             template.Components["diceComponent"] as Dictionary<object, object>, out var componentInstance));
 
         Assert.Equal(
@@ -79,7 +79,7 @@ public class ComponentFactoryTests
     {
         // sanity check
         Assert.True(_repository.TryGetByName("simple-template-with-script", out var template));
-        Assert.True(_componentFactory.TryCreateInstance<FoobarWithComponentScript>(
+        Assert.True(_componentFactory.TryCreateReferenceInstance<FoobarWithComponentScript>(
             template.Components["componentWithScript"] as Dictionary<object, object>, out var componentInstance));
 
         Assert.Equal("component.RollResult = component.diceProperty.Roll();", GetScriptSource(componentInstance.Script));
@@ -90,7 +90,7 @@ public class ComponentFactoryTests
     {
         // sanity check
         Assert.True(_repository.TryGetByName("simple-template-with-dice", out var template));
-        Assert.True(_componentFactory.TryCreateInstance<DiceAsStringComponent>(
+        Assert.True(_componentFactory.TryCreateReferenceInstance<DiceAsStringComponent>(
             template.Components["diceComponent"] as Dictionary<object, object>, out var componentInstance));
 
         Assert.Equal("3d6", componentInstance.DiceProperty);
@@ -101,7 +101,7 @@ public class ComponentFactoryTests
     {
         // sanity check
         Assert.True(_repository.TryGetByName("simple-template", out var template));
-        Assert.True(_componentFactory.TryCreateInstance<PartialFoobar>(
+        Assert.True(_componentFactory.TryCreateReferenceInstance<PartialFoobar>(
             template.Components["foobar"] as Dictionary<object, object>, out var componentInstance));
 
         Assert.Equal("abcdef", componentInstance.StringProperty);
@@ -112,7 +112,7 @@ public class ComponentFactoryTests
     {
         // sanity check
         Assert.True(_repository.TryGetByName("simple-template", out var template));
-        Assert.True(_componentFactory.TryCreateInstance<PartialFoobar2>(
+        Assert.True(_componentFactory.TryCreateReferenceInstance<PartialFoobar2>(
             template.Components["foobar"] as Dictionary<object, object>, out var componentInstance));
 
         Assert.Equal("abcdef", componentInstance.StringProperty);
@@ -127,7 +127,7 @@ public class ComponentFactoryTests
     {
         // sanity check
         Assert.True(_repository.TryGetByName("simple-template", out var template));
-        Assert.True(_componentFactory.TryCreateInstance<ComplexFoobar>(
+        Assert.True(_componentFactory.TryCreateReferenceInstance<ComplexFoobar>(
             template.Components["foobar"] as Dictionary<object, object>, out var componentInstance));
 
         Assert.Equal("abcdef", componentInstance.StringProperty);
@@ -139,12 +139,13 @@ public class ComponentFactoryTests
     {
         // sanity check
         Assert.True(_repository.TryGetByName("complex-template", out var template));
-        Assert.True(_componentFactory.TryCreateInstance<ComplexFoobar>(
+        Assert.True(_componentFactory.TryCreateReferenceInstance<ComplexFoobar>(
             template.Components["foobar"] as Dictionary<object, object>, out var componentInstance));
 
         Assert.Equal(123, componentInstance.NumProperty);
         Assert.Equal("abcdef", componentInstance.StringProperty);
 
+        Assert.NotNull(componentInstance.Embedded);
         Assert.Equal(234, componentInstance.Embedded.AnotherNumProperty);
         Assert.Equal("defgh", componentInstance.Embedded.AnotherStringProperty);
         Assert.Equal(234.1M, componentInstance.Embedded.DecimalProperty);
@@ -162,7 +163,7 @@ public class ComponentFactoryTests
     {
         // sanity check
         Assert.True(_repository.TryGetByName("complex-template", out var template));
-        Assert.True(_componentFactory.TryCreateInstance<ComplexFoobarAsStruct>(
+        Assert.True(_componentFactory.TryCreateReferenceInstance<ComplexFoobarAsStruct>(
             template.Components["foobar"] as Dictionary<object, object>, out var componentInstance));
 
         Assert.Equal(123, componentInstance.NumProperty);
@@ -186,6 +187,7 @@ public class ComponentFactoryTests
 
         public string StringProperty { get; set; }
     }
+
 
     internal struct ComplexFoobarAsStruct
     {
