@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Reflection;
 using Fasterflect;
 using RoguelikeToolkit.Entities.Exceptions;
@@ -22,6 +23,15 @@ namespace RoguelikeToolkit.Entities.Factory
         {
             try
             {
+                var executingAssembly = Assembly.GetExecutingAssembly();
+                var referenced = executingAssembly.GetReferencedAssemblies();
+
+                // make sure to load all referenced assemblies into the domain so we don't miss any assemblies
+                foreach (var asm in referenced)
+                {
+                    Assembly.Load(asm);
+                }
+
                 var nonFrameworkAssemblies =
                     from assembly in AppDomain.CurrentDomain.GetAssemblies()
                     where !IsFrameworkAssembly(assembly)
