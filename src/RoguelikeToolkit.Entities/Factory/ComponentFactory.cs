@@ -110,7 +110,7 @@ namespace RoguelikeToolkit.Entities.Factory
                 {
                     var memberName = accessor.Name;
 
-                    var relevantPair = GetRelevantPair(accessor.PropertyPath, memberName, objectData);
+                    var relevantPair = GetRelevantPair(accessor.PropertyPath.Select(x => x.Name), memberName, objectData);
 
                     if (relevantPair.Value != null)
                     {
