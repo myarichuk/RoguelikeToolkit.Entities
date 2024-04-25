@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v4.0.17.0] - 2024-04-25
+### :bug: Bug Fixes
+- [`b921adc`](https://github.com/myarichuk/RoguelikeToolkit.Entities/commit/b921adc91803ccbfa0c37cc9167399e6eb3b56e2) - merge conflict *(commit by [@myarichuk](https://github.com/myarichuk))*
+
+### :wrench: Chores
+- [`88cf483`](https://github.com/myarichuk/RoguelikeToolkit.Entities/commit/88cf48360387f560eb7f2c6bdd4d31e54cd257cd) - update dependencies *(commit by [@myarichuk](https://github.com/myarichuk))*
+
+
 ## [v4.0.6.0] - 2022-09-25
 ### :recycle: Refactors
 - [`5829d41`](https://github.com/myarichuk/RoguelikeToolkit.Entities/commit/5829d410a51d148d1d4ae59c10ecfc3f453e97b1) - refactor ComponentFactory for code quality *(commit by [@myarichuk](https://github.com/myarichuk))*
@@ -42,3 +50,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [v4.0.3.0]: https://github.com/myarichuk/RoguelikeToolkit.Entities/compare/v4.0.2.0...v4.0.3.0
 [v4.0.4.0]: https://github.com/myarichuk/RoguelikeToolkit.Entities/compare/v4.0.3.0...v4.0.4.0
 [v4.0.6.0]: https://github.com/myarichuk/RoguelikeToolkit.Entities/compare/v4.0.4.0...v4.0.6.0
+[v4.0.17.0]: https://github.com/myarichuk/RoguelikeToolkit.Entities/compare/v4.0.16.0...v4.0.17.0
