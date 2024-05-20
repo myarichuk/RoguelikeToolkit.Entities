@@ -18,7 +18,7 @@
     <PackageReference Include="DefaultEcs" Version="*" />
     <PackageReference Include="deniszykov.TypeConversion" Version="*" />
     <PackageReference Include="fasterflect" Version="*" />
-    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="8.0.4" />
+    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="8.0.5" />
     <PackageReference Include="ObjectTreeWalker" Version="0.11.1" />
     <PackageReference Include="YamlDotNet" Version="15.1.2" />
     <PackageReference Include="RoguelikeToolkit.Dice" Version="*" />
