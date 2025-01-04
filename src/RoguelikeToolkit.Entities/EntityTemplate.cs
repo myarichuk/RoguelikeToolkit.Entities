@@ -23,7 +23,7 @@ namespace RoguelikeToolkit.Entities
 
         private readonly Dictionary<string, object> _components = new(StringComparer.InvariantCultureIgnoreCase);
 
-        private readonly HashSet<string> _inherits = new(StringComparer.InvariantCultureIgnoreCase);
+        private HashSet<string> _inherits = new(StringComparer.InvariantCultureIgnoreCase);
         private readonly HashSet<string> _tags = new(StringComparer.InvariantCultureIgnoreCase);
 
         private readonly HashSet<EntityTemplate> _embeddedTemplates = new(EqualityComparer);
@@ -74,7 +74,11 @@ namespace RoguelikeToolkit.Entities
         /// <summary>
         /// Gets a collection of entity template names, from which entity templates this template inherits from
         /// </summary>
-        public IReadOnlySet<string> Inherits => _inherits;
+        public IReadOnlySet<string> Inherits
+        {
+            get => _inherits;
+            set => _inherits = new(value);
+        }
 
         /// <summary>
         /// Gets a collection of tags attached to this entity
@@ -91,7 +95,7 @@ namespace RoguelikeToolkit.Entities
         /// Merge this template data with other template. Does not override existing values
         /// </summary>
         /// <param name="other">entity template to copy values from</param>
-        internal void MergeWith(EntityTemplate other)
+        public void MergeWith(EntityTemplate other)
         {
             MergeComponents(other.Components);
             MergeInherits(other.Inherits);
