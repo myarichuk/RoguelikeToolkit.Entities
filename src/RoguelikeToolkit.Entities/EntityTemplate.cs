@@ -67,6 +67,11 @@ namespace RoguelikeToolkit.Entities
         public string? Name { get; set; }
 
         /// <summary>
+        /// Gets or sets the description of the entity template. This is an "echo" field, it is used for UI and such
+        /// </summary>
+        public string? Description { get; set; }
+
+        /// <summary>
         /// Gets the collection of entity components.
         /// </summary>
         public IReadOnlyDictionary<string, object> Components => _components;
