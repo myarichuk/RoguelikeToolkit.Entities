@@ -205,7 +205,11 @@ internal class EntityTemplateLoader
             }
 
             embeddedTemplate.Name = referencedTemplateFilename;
+#if NET5_0_OR_GREATER
+            ((HashSet<EntityTemplate>)template.EmbeddedTemplates).Add(embeddedTemplate);
+#else
             template.EmbeddedTemplates.Add(embeddedTemplate);
+#endif
 
             return true;
         }
@@ -245,7 +249,11 @@ internal class EntityTemplateLoader
         }
 
         embeddedTemplate.Name = embeddedTemplateName;
+#if NET5_0_OR_GREATER
+        ((HashSet<EntityTemplate>)template.EmbeddedTemplates).Add(embeddedTemplate);
+#else
         template.EmbeddedTemplates.Add(embeddedTemplate);
+#endif
 
         return true;
     }
