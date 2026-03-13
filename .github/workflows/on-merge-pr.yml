@@ -20,14 +20,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Setup .NET tooling
-        uses: actions/setup-dotnet@v2
+        uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 6.0.x
+          dotnet-version: 10.0.x
       - name: Install GitVersion
         uses: gittools/actions/gitversion/setup@v0.9.7
         with:
           versionSpec: '5.x'
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Determine version
@@ -55,7 +55,7 @@ jobs:
     needs: [build-and-pack]
     steps:
       - name: Git Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Update CHANGELOG
         id: changelog
         uses: Requarks/changelog-action@v1
@@ -87,11 +87,11 @@ jobs:
     needs: [changelog-release]
     steps:
       - name: Setup .NET tooling
-        uses: actions/setup-dotnet@v2
+        uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 6.0.x
+          dotnet-version: 10.0.x
       - name: Git Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Pack NuGet
         run: dotnet pack --configuration release /p:CI=true -o:package /p:AssemblyVersion=${{needs.changelog-release.outputs.version}} /p:Version=${{needs.changelog-release.outputs.version}} /p:PackageVersion=${{needs.changelog-release.outputs.version}}
       - name: Publish to NuGet

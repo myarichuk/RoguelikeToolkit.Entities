@@ -79,7 +79,11 @@ namespace RoguelikeToolkit.Entities
         /// <summary>
         /// Gets a collection of entity template names, from which entity templates this template inherits from
         /// </summary>
+#if NET5_0_OR_GREATER
         public IReadOnlySet<string> Inherits
+#else
+        public ISet<string> Inherits
+#endif
         {
             get => _inherits;
             set => _inherits = new(value);
@@ -88,13 +92,21 @@ namespace RoguelikeToolkit.Entities
         /// <summary>
         /// Gets a collection of tags attached to this entity
         /// </summary>
+#if NET5_0_OR_GREATER
         public IReadOnlySet<string> Tags => _tags;
+#else
+        public ISet<string> Tags => _tags;
+#endif
 
         /// <summary>
         /// Gets the collection of embedded templates contained in this one
         /// </summary>
         [YamlIgnore]
-        public HashSet<EntityTemplate> EmbeddedTemplates => _embeddedTemplates;
+#if NET5_0_OR_GREATER
+        public IReadOnlySet<EntityTemplate> EmbeddedTemplates => _embeddedTemplates;
+#else
+        public ISet<EntityTemplate> EmbeddedTemplates => _embeddedTemplates;
+#endif
 
         /// <summary>
         /// Merge this template data with other template. Does not override existing values
@@ -121,7 +133,11 @@ namespace RoguelikeToolkit.Entities
         /// </summary>
         /// <param name="otherInherits">inheritance data to copy values from</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+#if NET5_0_OR_GREATER
         internal void MergeInherits(IReadOnlySet<string> otherInherits) =>
+#else
+        internal void MergeInherits(ISet<string> otherInherits) =>
+#endif
             _inherits.UnionWith(otherInherits);
 
         /// <summary>
@@ -129,7 +145,11 @@ namespace RoguelikeToolkit.Entities
         /// </summary>
         /// <param name="otherTags">tags data to copy values from</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+#if NET5_0_OR_GREATER
         internal void MergeTags(IReadOnlySet<string> otherTags) =>
+#else
+        internal void MergeTags(ISet<string> otherTags) =>
+#endif
             _tags.UnionWith(otherTags);
 
         /// <summary>
@@ -137,7 +157,11 @@ namespace RoguelikeToolkit.Entities
         /// </summary>
         /// <param name="otherEmbeddedTemplates">embedded template data to copy values from</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+#if NET5_0_OR_GREATER
         internal void MergeEmbeddedTemplates(IReadOnlySet<EntityTemplate> otherEmbeddedTemplates) =>
+#else
+        internal void MergeEmbeddedTemplates(ISet<EntityTemplate> otherEmbeddedTemplates) =>
+#endif
             _embeddedTemplates.UnionWith(otherEmbeddedTemplates);
 
         private sealed class NameEqualityComparer : IEqualityComparer<EntityTemplate>
