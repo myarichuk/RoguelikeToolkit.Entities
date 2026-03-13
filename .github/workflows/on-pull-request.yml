@@ -14,8 +14,8 @@ jobs:
     name: Ensure Conventional Commits
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: webiny/action-conventional-commits@v1.0.5
+      - uses: actions/checkout@v4
+      - uses: webiny/action-conventional-commits@v1.3.0
 
   # pr-labeler:
   #   name: PR Labeler
