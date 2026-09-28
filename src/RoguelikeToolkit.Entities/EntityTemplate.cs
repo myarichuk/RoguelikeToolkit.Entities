@@ -50,6 +50,10 @@ namespace RoguelikeToolkit.Entities
                 throw new ArgumentNullException(nameof(other));
             }
 
+            // note: the copy constructor backs "with" expressions, so identity fields must be copied too,
+            // otherwise resolved (effective) templates silently lose their name and description
+            Name = other.Name;
+            Description = other.Description;
             _components = new Dictionary<string, object>(other.Components, StringComparer.InvariantCultureIgnoreCase);
             _inherits = new HashSet<string>(other.Inherits, StringComparer.InvariantCultureIgnoreCase);
             _tags = new HashSet<string>(other.Tags, StringComparer.InvariantCultureIgnoreCase);
@@ -77,7 +81,7 @@ namespace RoguelikeToolkit.Entities
         public IReadOnlyDictionary<string, object> Components => _components;
 
         /// <summary>
-        /// Gets a collection of entity template names, from which entity templates this template inherits from
+        /// Gets or sets a collection of entity template names, from which entity templates this template inherits from
         /// </summary>
 #if NET5_0_OR_GREATER
         public IReadOnlySet<string> Inherits
@@ -163,6 +167,52 @@ namespace RoguelikeToolkit.Entities
         internal void MergeEmbeddedTemplates(ISet<EntityTemplate> otherEmbeddedTemplates) =>
 #endif
             _embeddedTemplates.UnionWith(otherEmbeddedTemplates);
+
+        /// <summary>
+        /// Add a single tag to this template. Used by the loader to populate the template without intermediate copies.
+        /// </summary>
+        /// <param name="tag">tag to add.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void AddTag(string tag) =>
+            _tags.Add(tag);
+
+        /// <summary>
+        /// Add a single inheritance entry to this template. Used by the loader to populate the template without intermediate copies.
+        /// </summary>
+        /// <param name="inheritedTemplateName">name of the inherited template to add.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void AddInherit(string inheritedTemplateName) =>
+            _inherits.Add(inheritedTemplateName);
+
+        /// <summary>
+        /// Add a single component to this template. Does not override an existing entry with the same name.
+        /// </summary>
+        /// <param name="componentName">name of the component to add.</param>
+        /// <param name="componentData">raw component data to add.</param>
+        /// <returns>true if the component was added, false if a component with the same name already exists.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal bool AddComponent(string componentName, object componentData)
+        {
+#if NET5_0_OR_GREATER
+            return _components.TryAdd(componentName, componentData);
+#else
+            if (_components.ContainsKey(componentName))
+            {
+                return false;
+            }
+
+            _components.Add(componentName, componentData);
+            return true;
+#endif
+        }
+
+        /// <summary>
+        /// Add a single embedded template to this template. Used by the loader to populate the template without intermediate copies.
+        /// </summary>
+        /// <param name="embeddedTemplate">embedded template to add.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void AddEmbeddedTemplate(EntityTemplate embeddedTemplate) =>
+            _embeddedTemplates.Add(embeddedTemplate);
 
         private sealed class NameEqualityComparer : IEqualityComparer<EntityTemplate>
         {

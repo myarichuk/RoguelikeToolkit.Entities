@@ -7,12 +7,21 @@ namespace RoguelikeToolkit.Entities.Repository;
 
 /// <summary>
 /// An abstraction of a collection of entity template files. May or may not be composed of multiple folders or single files.
+/// Thread-safety: reads (<see cref="TryGetByName"/>, <see cref="GetByTags"/>) are lock-free and may run
+/// concurrently with loads. Parsing happens off to the side (in parallel for folders); single-template
+/// loads become visible immediately, while a folder load commits its batch one template at a time, so a
+/// concurrent reader may observe a prefix of the batch. A failed folder load commits nothing.
 /// </summary>
 public class EntityTemplateRepository
 {
-    private static readonly HashSet<string> ValidExtensions = new() { ".yaml", ".json" };
+    private static readonly HashSet<string> ValidExtensions = new(StringComparer.OrdinalIgnoreCase) { ".yaml", ".json" };
     private readonly EntityTemplateLoader _loader = new();
     private readonly ConcurrentDictionary<string, EntityTemplate> _entityRepository = new(StringComparer.InvariantCultureIgnoreCase);
+
+    // Inverted tag index: tag -> template names. Built incrementally at load time so that
+    // GetByTags avoids a full repository scan. Reflects tags as of load; post-load template
+    // mutation (e.g. MergeWith) is not tracked.
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _tagIndex = new(StringComparer.InvariantCultureIgnoreCase);
 
     /// <summary>
     /// Gets the list of all template names present in the repository
@@ -46,16 +55,15 @@ public class EntityTemplateRepository
             throw new FailedToParseException(templateName, "The template seems to be loaded but it is null, probably due to parsing errors. This is not supposed to happen and is likely a bug.");
         }
 
-        if (hasFound && string.IsNullOrWhiteSpace(template!.Name))
-        {
-            template.Name = templateName;
-        }
-
+        // Note: template names are backfilled at load time (see LoadTemplate); do not mutate the cached instance here.
         return hasFound;
     }
 
     /// <summary>
-    /// Get one or more template by matching the tags in the template definition to the parameter
+    /// Get one or more template by matching the tags in the template definition to the parameter.
+    /// Served by an inverted tag index maintained at load time (cost is proportional to the number of
+    /// matching templates, not the repository size). Tag matching is case-insensitive. An empty
+    /// <paramref name="tags"/> query returns all templates.
     /// </summary>
     /// <param name="tags">Tags that must be present in the template to fetch it</param>
     /// <returns>A collection of entity templates that contain ALL of the specified tags</returns>
@@ -76,7 +84,44 @@ public class EntityTemplateRepository
             throw new ArgumentNullException(nameof(tags), "one or more of the tags is null, this is not supported");
         }
 
-        return _entityRepository.Values.Where(t => t.Tags.IsSupersetOf(tags));
+        if (tags.Length == 0)
+        {
+            return _entityRepository.Values.ToList();
+        }
+
+        HashSet<string>? matchingNames = null;
+        foreach (var tag in tags.OrderBy(tag => _tagIndex.TryGetValue(tag, out var names) ? names.Count : 0))
+        {
+            if (!_tagIndex.TryGetValue(tag, out var names))
+            {
+                return Enumerable.Empty<EntityTemplate>();
+            }
+
+            if (matchingNames == null)
+            {
+                matchingNames = new HashSet<string>(names.Keys, StringComparer.InvariantCultureIgnoreCase);
+            }
+            else
+            {
+                matchingNames.IntersectWith(names.Keys);
+            }
+
+            if (matchingNames.Count == 0)
+            {
+                return Enumerable.Empty<EntityTemplate>();
+            }
+        }
+
+        var result = new List<EntityTemplate>(matchingNames!.Count);
+        foreach (var name in matchingNames)
+        {
+            if (_entityRepository.TryGetValue(name, out var template))
+            {
+                result.Add(template);
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -99,16 +144,27 @@ public class EntityTemplateRepository
         }
 #endif
 
-        var template = _loader.LoadFrom(reader);
+        var template = _loader.LoadFrom(reader)
+            ?? throw new FailedToParseException(templateName, "The template loaded as null, probably due to parsing errors. This is not supposed to happen and is likely a bug.");
 
-        if (!_entityRepository.TryAdd(templateName, template!))
+        if (string.IsNullOrWhiteSpace(template.Name))
+        {
+            template.Name = templateName;
+        }
+
+        if (!_entityRepository.TryAdd(templateName, template))
         {
             throw new TemplateAlreadyExistsException(templateName);
         }
+
+        AddToTagIndex(templateName, template);
     }
 
     /// <summary>
-    /// Load template into the repository from a file
+    /// Load template into the repository from a file.
+    /// The template name is derived from the file name with only the last extension stripped
+    /// (e.g. <c>template-only-tags.test.foobar.yaml</c> loads as <c>template-only-tags.test.foobar</c>).
+    /// Extension matching is case-insensitive (<c>.yaml</c>, <c>.YAML</c>, <c>.json</c>, ...).
     /// </summary>
     /// <param name="templateFile">A file to load the template from</param>
     /// <exception cref="FileNotFoundException">Template file not found</exception>
@@ -132,21 +188,14 @@ public class EntityTemplateRepository
         }
 #endif
 
-        if (!templateFile.Exists)
+        var (templateName, template) = ParseTemplateFile(templateFile);
+
+        if (!_entityRepository.TryAdd(templateName, template))
         {
-            throw new FileNotFoundException("Template file not found", templateFile.FullName);
+            throw new TemplateAlreadyExistsException(templateName);
         }
 
-        if (!ValidExtensions.Contains(templateFile.Extension))
-        {
-            throw new InvalidOperationException($"Template files must have either {string.Join("or", ValidExtensions)} extensions");
-        }
-
-        using var fs = templateFile.OpenRead();
-        using var reader = new StreamReader(fs);
-
-        var dot = templateFile.Name.LastIndexOf('.');
-        LoadTemplate(templateFile.Name[..dot], reader);
+        AddToTagIndex(templateName, template);
     }
 
     /// <summary>
@@ -180,7 +229,10 @@ public class EntityTemplateRepository
     }
 
     /// <summary>
-    /// Load all templates from a folder into the repository
+    /// Load all templates from a folder into the repository.
+    /// Files are parsed in parallel and the load is atomic: if any file fails to parse, an
+    /// <see cref="AggregateException"/> with one inner exception per failed file is thrown and
+    /// the repository is left unchanged.
     /// </summary>
     /// <param name="templateFolder">Folder to load templates from</param>
     /// <exception cref="SecurityException">The caller does not have the required permission for the repository folder.</exception>
@@ -194,9 +246,36 @@ public class EntityTemplateRepository
     /// <exception cref="OverflowException">The repository cache contains too many elements.</exception>
     /// <exception cref="TemplateAlreadyExistsException">Template with specified name already exists.</exception>
     /// <exception cref="ArgumentException">If .NET Framework and .NET Core versions older than 2.1: <paramref name="templateFolder" /> contains invalid characters such as ", &lt;, &gt;, or |.</exception>
+    /// <exception cref="AggregateException">One or more template files failed to load. The repository is left unchanged.</exception>
     /// <exception cref="FailedToParseException">Failed to parse the template for any reason.</exception>
     /// <exception cref="InvalidOperationException">Template files must have either 'yaml' or 'json' extensions</exception>
-    public void LoadTemplateFolder(string templateFolder)
+    public void LoadTemplateFolder(string templateFolder) =>
+        LoadTemplateFolder(templateFolder, CancellationToken.None);
+
+    /// <summary>
+    /// Load all templates from a folder into the repository.
+    /// Files are parsed in parallel and the load is atomic: if any file fails to parse, an
+    /// <see cref="AggregateException"/> with one inner exception per failed file is thrown and
+    /// the repository is left unchanged.
+    /// </summary>
+    /// <param name="templateFolder">Folder to load templates from</param>
+    /// <param name="cancellationToken">token to observe while loading</param>
+    /// <exception cref="SecurityException">The caller does not have the required permission for the repository folder.</exception>
+    /// <exception cref="PathTooLongException">The specified path of the repository folder exceeds the system-defined maximum length.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="templateFolder"/> is <see langword="null"/></exception>
+    /// <exception cref="DirectoryNotFoundException">The specified path of template file is invalid, such as being on an unmapped drive.</exception>
+    /// <exception cref="FileNotFoundException">Template file not found</exception>
+    /// <exception cref="IOException">The template file is already open.</exception>
+    /// <exception cref="UnauthorizedAccessException"><see cref="P:System.IO.FileInfo.Name" /> template file is read-only or is a directory.</exception>
+    /// <exception cref="OutOfMemoryException">The length of the one of the strings overflows the maximum allowed length (<see cref="int.MaxValue" />). This is highly unlikely but still can happen :)</exception>
+    /// <exception cref="OverflowException">The repository cache contains too many elements.</exception>
+    /// <exception cref="TemplateAlreadyExistsException">Template with specified name already exists.</exception>
+    /// <exception cref="ArgumentException">If .NET Framework and .NET Core versions older than 2.1: <paramref name="templateFolder" /> contains invalid characters such as ", &lt;, &gt;, or |.</exception>
+    /// <exception cref="AggregateException">One or more template files failed to load. The repository is left unchanged.</exception>
+    /// <exception cref="OperationCanceledException">Loading was cancelled via <paramref name="cancellationToken"/>.</exception>
+    /// <exception cref="FailedToParseException">Failed to parse the template for any reason.</exception>
+    /// <exception cref="InvalidOperationException">Template files must have either 'yaml' or 'json' extensions</exception>
+    public void LoadTemplateFolder(string templateFolder, CancellationToken cancellationToken)
     {
 #if NET5_0_OR_GREATER
         ArgumentNullException.ThrowIfNull(templateFolder);
@@ -213,13 +292,106 @@ public class EntityTemplateRepository
             throw new DirectoryNotFoundException($"Template directory not found (path = {templateFolder})");
         }
 
-        foreach (var fi in EnumerateTemplateFiles(di))
+        var files = EnumerateTemplateFiles(di).ToList();
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // parse phase (parallel, no repository mutation so failures leave the repository untouched)
+        var parsed = new (string TemplateName, EntityTemplate Template)[files.Count];
+        var errors = new ConcurrentQueue<Exception>();
+        Parallel.For(
+            0,
+            files.Count,
+            new ParallelOptions { CancellationToken = cancellationToken },
+            i =>
+            {
+                try
+                {
+                    parsed[i] = ParseTemplateFile(files[i]);
+                }
+                catch (Exception e) when (e is not OperationCanceledException)
+                {
+                    errors.Enqueue(
+                        new InvalidOperationException($"Failed to load template file '{files[i].FullName}'. Reason: {e.Message}", e));
+                }
+            });
+
+        if (!errors.IsEmpty)
         {
-            LoadTemplate(fi);
+            throw new AggregateException(
+                $"Failed to load {errors.Count} template file(s) from folder '{templateFolder}'. The repository was left unchanged.",
+                errors);
         }
 
-        static IEnumerable<FileInfo> EnumerateTemplateFiles(DirectoryInfo di) =>
-            di.EnumerateFiles("*.yaml", SearchOption.AllDirectories)
-                .Concat(di.EnumerateFiles("*.json", SearchOption.AllDirectories));
+        // commit phase (sequential and pre-validated, so either all templates are added or none)
+        var batchNames = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);
+        foreach (var (templateName, _) in parsed)
+        {
+            if (!batchNames.Add(templateName) || _entityRepository.ContainsKey(templateName))
+            {
+                throw new TemplateAlreadyExistsException(templateName);
+            }
+        }
+
+        foreach (var (templateName, template) in parsed)
+        {
+            _entityRepository.TryAdd(templateName, template);
+            AddToTagIndex(templateName, template);
+        }
+    }
+
+    /// <summary>
+    /// Load all templates from a folder into the repository asynchronously.
+    /// The load is offloaded to the thread pool (parsing is CPU/IO bound) and is atomic:
+    /// on failure the repository is left unchanged, see <see cref="LoadTemplateFolder(string, CancellationToken)"/>.
+    /// </summary>
+    /// <param name="templateFolder">Folder to load templates from</param>
+    /// <param name="cancellationToken">token to observe while loading</param>
+    /// <returns>a task that completes when all templates are loaded</returns>
+    public Task LoadTemplateFolderAsync(string templateFolder, CancellationToken cancellationToken = default) =>
+        Task.Run(() => LoadTemplateFolder(templateFolder, cancellationToken), cancellationToken);
+
+    private static bool HasValidExtension(string extension) =>
+        ValidExtensions.Contains(extension);
+
+    private static IEnumerable<FileInfo> EnumerateTemplateFiles(DirectoryInfo di) =>
+        di.EnumerateFiles("*", SearchOption.AllDirectories)
+            .Where(file => HasValidExtension(file.Extension));
+
+    private static (string TemplateName, EntityTemplate Template) ParseTemplateFile(FileInfo templateFile)
+    {
+        if (!templateFile.Exists)
+        {
+            throw new FileNotFoundException("Template file not found", templateFile.FullName);
+        }
+
+        if (!HasValidExtension(templateFile.Extension))
+        {
+            throw new InvalidOperationException($"Template files must have either {string.Join("or", ValidExtensions)} extensions");
+        }
+
+        // note: a fresh loader per file, YamlDotNet deserializer instances are not documented as thread-safe.
+        // note 2: the FileInfo overload (not the stream one) is used so that $ref paths resolve against the file's directory.
+        var template = new EntityTemplateLoader().LoadFrom(templateFile)
+            ?? throw new FailedToParseException(templateFile.FullName, "The template loaded as null, probably due to parsing errors. This is not supposed to happen and is likely a bug.");
+
+        var dot = templateFile.Name.LastIndexOf('.');
+        var templateName = dot < 0 ? templateFile.Name : templateFile.Name[..dot];
+
+        if (string.IsNullOrWhiteSpace(template.Name))
+        {
+            template.Name = templateName;
+        }
+
+        return (templateName, template);
+    }
+
+    private void AddToTagIndex(string templateName, EntityTemplate template)
+    {
+        foreach (var tag in template.Tags)
+        {
+            _tagIndex
+                .GetOrAdd(tag, _ => new ConcurrentDictionary<string, byte>(StringComparer.InvariantCultureIgnoreCase))
+                .TryAdd(templateName, 0);
+        }
     }
 }

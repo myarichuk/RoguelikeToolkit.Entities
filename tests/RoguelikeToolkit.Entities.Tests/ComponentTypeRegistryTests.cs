@@ -46,5 +46,15 @@ namespace RoguelikeToolkit.Entities.Tests
         [Fact]
         public void Will_return_false_on_non_existing_component_type() =>
             Assert.False(_componentTypeRegistry.TryGetComponentType("non-existing-type", out _));
+
+        [Fact]
+        public void Registry_is_shared_between_instances()
+        {
+            var anotherRegistry = new ComponentTypeRegistry();
+
+            Assert.True(anotherRegistry.TryGetComponentType(nameof(ComponentA), out var typeA));
+            Assert.True(_componentTypeRegistry.TryGetComponentType(nameof(ComponentA), out var typeB));
+            Assert.Same(typeA, typeB);
+        }
     }
 }

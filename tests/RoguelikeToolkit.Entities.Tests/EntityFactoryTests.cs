@@ -144,6 +144,114 @@ namespace RoguelikeToolkit.Entities.Tests
         }
 
         [Fact]
+        public void Can_create_embedded_hierarchy_without_duplicates()
+        {
+            Assert.True(_entityFactory.TryCreate("template-with-embedded", out var entity));
+
+            var descendants = entity.GetChildren();
+
+            // root + EmbeddedTemplate1 + EmbeddedTemplate2 + EmbeddedTemplate3 (grandchild) = 3 descendants
+            Assert.Equal(3, descendants.Count);
+
+            // only the grandchild has Foobar without Barfoo/Foo; a duplicate would make this 2
+            var foobarOnly = descendants.Count(e => e.Has<Foobar>() && !e.Has<Barfoo>() && !e.Has<Foo>());
+            Assert.Equal(1, foobarOnly);
+        }
+
+        [Fact]
+        public void Can_create_inherited_embedded_children()
+        {
+            var repository = new EntityTemplateRepository();
+            using var baseStream = new MemoryStream(
+                System.Text.Encoding.UTF8.GetBytes(
+                    "ChildA:\n Components:\n  foobar:\n   stringProperty: abcdef\n   numProperty: 123\nComponents:\n foobar:\n  stringProperty: abcdef\n  numProperty: 123\n"));
+            using var baseReader = new StreamReader(baseStream);
+            repository.LoadTemplate("base-with-child", baseReader);
+
+            using var derivedStream = new MemoryStream(
+                System.Text.Encoding.UTF8.GetBytes("Inherits:\n - base-with-child\nComponents:\n foo: hello\n"));
+            using var derivedReader = new StreamReader(derivedStream);
+            repository.LoadTemplate("derived-with-child", derivedReader);
+
+            using var world = new World();
+            var factory = new EntityFactory(repository, world);
+
+            Assert.True(factory.TryCreate("derived-with-child", out var entity));
+
+            var descendants = entity.GetChildren();
+            Assert.Single(descendants);
+            Assert.True(descendants[0].Has<Foobar>());
+        }
+
+        [Fact]
+        public void Should_throw_on_cyclic_embedded_templates()
+        {
+            var templateA = new EntityTemplate { Name = "embedded-cycle-a" };
+            var templateB = new EntityTemplate { Name = "embedded-cycle-b" };
+            templateA.MergeEmbeddedTemplates(new HashSet<EntityTemplate> { templateB });
+            templateB.MergeEmbeddedTemplates(new HashSet<EntityTemplate> { templateA });
+
+            Assert.Throws<InvalidOperationException>(() => _entityFactory.TryCreate(templateA, out _));
+        }
+
+        [Fact]
+        public void Child_sharing_parent_name_is_still_created()
+        {
+            // no name-based root skipping: names are case-insensitive identifiers,
+            // a child is only skipped when it is the same template reference (a cycle)
+            var root = new EntityTemplate { Name = "SameName" };
+            var child = new EntityTemplate { Name = "samename" };
+            root.MergeEmbeddedTemplates(new HashSet<EntityTemplate> { child });
+
+            Assert.True(_entityFactory.TryCreate(root, out var entity));
+            Assert.Single(entity.GetChildren());
+        }
+
+        [Fact]
+        public void Global_component_conflict_first_write_wins()
+        {
+            var repository = new EntityTemplateRepository();
+            using var firstStream = new MemoryStream(
+                System.Text.Encoding.UTF8.GetBytes("Components:\n attributes:\n  strength: 12\n  agility: 8\n"));
+            using var firstReader = new StreamReader(firstStream);
+            repository.LoadTemplate("global-first", firstReader);
+
+            using var secondStream = new MemoryStream(
+                System.Text.Encoding.UTF8.GetBytes("Components:\n attributes:\n  strength: 99\n  agility: 1\n"));
+            using var secondReader = new StreamReader(secondStream);
+            repository.LoadTemplate("global-second", secondReader);
+
+            using var world = new World();
+            var factory = new EntityFactory(repository, world);
+
+            Assert.True(factory.TryCreate("global-first", out var entityA));
+            Assert.True(factory.TryCreate("global-second", out var entityB));
+
+            var attributesA = entityA.Get<Attributes>();
+            var attributesB = entityB.Get<Attributes>();
+
+            // first write wins: both entities share the first spawn's instance, the second values are ignored
+            Assert.Same(attributesA, attributesB);
+            Assert.Equal(12, attributesB.Strength);
+            Assert.Equal(8, attributesB.Agility);
+        }
+
+        [Fact]
+        public void Should_throw_on_null_component_value()
+        {
+            var repository = new EntityTemplateRepository();
+            using var stream = new MemoryStream(
+                System.Text.Encoding.UTF8.GetBytes("Components:\n foobar:\n"));
+            using var reader = new StreamReader(stream);
+            repository.LoadTemplate("null-component", reader);
+
+            using var world = new World();
+            var factory = new EntityFactory(repository, world);
+
+            Assert.Throws<InvalidOperationException>(() => factory.TryCreate("null-component", out _));
+        }
+
+        [Fact]
         public void Can_create_entity_with_two_level_inherit()
         {
             Assert.True(_entityFactory.TryCreate("template-with-inherit-two-levels", out var entity));

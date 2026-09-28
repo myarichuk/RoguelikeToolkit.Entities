@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using deniszykov.TypeConversion;
 using Fasterflect;
@@ -14,11 +13,20 @@ using static deniszykov.TypeConversion.ConversionOptions;
 namespace RoguelikeToolkit.Entities.Factory;
 
 /// <summary>
-/// Factory helper that creates a component instance by type and sets it's values using provided data
+/// Factory helper that creates a component instance by type and sets it's values using provided data.
+/// Template keys are indexed once per call (case-insensitive), so member lookup is O(1) per member
+/// instead of scanning the template data per member. Template properties that match no member are
+/// reported via <see cref="EntityDiagnostics"/> (likely typos); everything else behaves as before.
 /// </summary>
 internal class ComponentFactory
 {
-    private readonly ConcurrentDictionary<Type, IList<PropertyInfo>> _typePropertyCache = new();
+    // IValueComponent{T} payload types are per-type constants; calling GetInterfaces() per instance was pure overhead.
+    private static readonly ConcurrentDictionary<Type, Type> ValueComponentPayloadCache = new();
+
+    // Dice expressions are immutable once parsed, so identical strings share a single parse.
+    // Scripts are intentionally NOT shared: script instances hold per-entity state.
+    private static readonly ConcurrentDictionary<string, Dice> DiceParseCache = new();
+
     private readonly ObjectMemberIterator _memberIterator = new();
 
     private readonly TypeConversionProvider _typeConversionProvider = new(Options.Create(new TypeConversionProviderOptions
@@ -33,7 +41,7 @@ internal class ComponentFactory
     {
         _typeConversionProvider.RegisterConversion<string, Dice>(
             (src, _, __) =>
-                Dice.Parse(src, true),
+                DiceParseCache.GetOrAdd(src, static s => Dice.Parse(s, true)),
             ConversionQuality.Custom);
 
         _typeConversionProvider.RegisterConversion<string, EntityScript>(
@@ -75,14 +83,11 @@ internal class ComponentFactory
         var instanceAsObject = CreateEmptyInstance(componentType);
 
         // ReSharper disable once ExceptionNotDocumented
-        var valueComponentType = componentType.GetInterfaces()
-            .FirstOrDefault(i => i.FullName?.Contains(nameof(IValueComponent<object>)) ?? false);
-
         instanceAsObject.SetPropertyValue(
             nameof(IValueComponent<object>.Value),
             _typeConversionProvider.Convert(
                 objectData.GetType(),
-                valueComponentType?.GenericTypeArguments[0] ?? throw new InvalidOperationException("This is not supposed to happen and is likely a bug."),
+                GetValueComponentPayloadType(componentType),
                 objectData));
 
         instance = instanceAsObject.UnwrapIfWrapped();
@@ -104,13 +109,19 @@ internal class ComponentFactory
         instance = default;
         var instanceAsObject = CreateEmptyInstance(componentType);
 
+        // Index once: every member lookup below is O(1) instead of an O(P) scan.
+        var topIndex = BuildKeyIndex(objectData, componentType);
+        var consumedTopKeys = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);
+
         _memberIterator.Traverse(
             instanceAsObject,
             (in MemberAccessor accessor) =>
             {
                 var memberName = accessor.Name;
 
-                var relevantPair = GetRelevantPair(accessor.PropertyPath.Select(x => x.Name), memberName, objectData);
+                // Materialize once: the old code enumerated the path repeatedly (Any/Foreach/Last-in-loop).
+                var propertyPath = accessor.PropertyPath.Select(x => x.Name).ToArray();
+                var relevantPair = GetRelevantPair(propertyPath, memberName, topIndex, consumedTopKeys);
 
                 if (relevantPair.Value != null)
                 {
@@ -121,48 +132,68 @@ internal class ComponentFactory
                     {
                         accessor.SetValue(convertedValue);
                     }
+                    else
+                    {
+                        EntityDiagnostics.Warn(
+                            $"Component '{componentType.FullName}' member '{memberName}' resolved a value that converted to null; the value was skipped. Check whether the template schema is correct.");
+                    }
                 }
             },
             (in MemberAccessor accessor) => accessor.MemberType == MemberType.Property);
+
+        // Anything left over matches no member (typo, removed property, field instead of property):
+        // previously silently ignored, now reported through the diagnostics hook.
+        foreach (var key in topIndex.Keys)
+        {
+            if (!consumedTopKeys.Contains(key))
+            {
+                EntityDiagnostics.Warn(
+                    $"Component '{componentType.FullName}' has no member for template property '{key}'; the value was ignored. Check whether the template schema is correct.");
+            }
+        }
 
         instance = instanceAsObject.UnwrapIfWrapped();
         return true;
 
         KeyValuePair<object, object> GetRelevantPair(
-            IEnumerable<string> propertyPath,
+            string[] propertyPath,
             string memberName,
-            IReadOnlyDictionary<object, object> objectData)
+            Dictionary<string, KeyValuePair<object, object>> rootIndex,
+            HashSet<string> consumedKeys)
         {
-            if (!propertyPath.Any())
+            if (propertyPath.Length == 0)
             {
-                return objectData.FirstOrDefault(kvp =>
-                    string.Equals((string)kvp.Key, memberName, StringComparison.InvariantCultureIgnoreCase));
+                if (rootIndex.TryGetValue(memberName, out var pair))
+                {
+                    consumedKeys.Add(memberName);
+                    return pair;
+                }
+
+                return default;
             }
 
-            var currentObjectData = objectData;
-
-            foreach (var pathElement in propertyPath)
+            if (!rootIndex.TryGetValue(propertyPath[0], out var topPair))
             {
-                var subElement = currentObjectData!.FirstOrDefault(x =>
-                    string.Equals(x.Key as string, pathElement, StringComparison.InvariantCultureIgnoreCase));
+                return default;
+            }
 
-                if (subElement.Value is IReadOnlyDictionary<object, object> subObject)
+            consumedKeys.Add(propertyPath[0]);
+
+            var currentPair = topPair;
+            for (var i = 1; i < propertyPath.Length; i++)
+            {
+                if (currentPair.Value is not IReadOnlyDictionary<object, object> currentData)
                 {
-                    if (propertyPath.Last() == pathElement)
-                    {
-                        return subElement;
-                    }
-
-                    currentObjectData = subObject;
+                    return currentPair;
                 }
-                else
+
+                if (!BuildKeyIndex(currentData, componentType).TryGetValue(propertyPath[i], out currentPair))
                 {
-                    return subElement;
+                    return default;
                 }
             }
 
-            return currentObjectData.FirstOrDefault(kvp =>
-                string.Equals((string)kvp.Key, memberName, StringComparison.InvariantCultureIgnoreCase));
+            return currentPair;
         }
     }
 
@@ -179,6 +210,27 @@ internal class ComponentFactory
         var success = TryCreateReferenceInstance(typeof(TComponent), objectData, out var instanceAsObject);
         instance = (TComponent)instanceAsObject!;
         return success;
+    }
+
+    private static Type GetValueComponentPayloadType(Type componentType) =>
+        ValueComponentPayloadCache.GetOrAdd(
+            componentType,
+            static type => type.GetInterfaces()
+                .FirstOrDefault(i => i.FullName?.Contains(nameof(IValueComponent<object>)) ?? false)
+                ?.GenericTypeArguments[0]
+            ?? throw new InvalidOperationException("This is not supposed to happen and is likely a bug."));
+
+    private static Dictionary<string, KeyValuePair<object, object>> BuildKeyIndex(
+        IReadOnlyDictionary<object, object> objectData, Type componentType)
+    {
+        var index = new Dictionary<string, KeyValuePair<object, object>>(objectData.Count, StringComparer.InvariantCultureIgnoreCase);
+        foreach (var kvp in objectData)
+        {
+            // Throws InvalidOperationException on non-string keys, same as the old per-member scan did.
+            index.TryAdd(GetPropertyKeyOrThrow(kvp.Key, componentType, "<template data>"), kvp);
+        }
+
+        return index;
     }
 
     private static void ValidateValueComponentInputThrowIfNeeded(Type componentType, object objectData)
@@ -220,29 +272,19 @@ internal class ComponentFactory
     private static object CreateEmptyInstance(Type type) =>
         RuntimeHelpers.GetUninitializedObject(type).WrapIfValueType();
 
-    private bool TrySetPropertyValue(Type componentType, KeyValuePair<object, object> propertyData, object instanceAsObject)
-    {
-        if (!TryGetDestPropertyFor(componentType, propertyData.Key, out var property))
-        {
-            return true;
-        }
-
-        // note: ConvertValueFromSrcToDestType() can call recursively to this method (TryCreateValueInstance)
-        if (!instanceAsObject.TrySetPropertyValue(
-                property!.Name,
-                ConvertValueFromSrcToDestType(
-                    propertyData.Value,
-                    property.PropertyType)))
-        {
-            // TODO: add logging for the failure
-            return false;
-        }
-
-        return true;
-    }
+    private static string GetPropertyKeyOrThrow(object? key, Type componentType, string memberName) =>
+        key as string
+        ?? throw new InvalidOperationException(
+            $"Component '{componentType.FullName}' received a non-string property key ('{key ?? "<null>"}') while resolving member '{memberName}'. Check whether the template schema is correct.");
 
     private object? ConvertValueFromSrcToDestType(object srcValue, Type destType)
     {
+        if (srcValue == null)
+        {
+            throw new InvalidOperationException(
+                $"Component '{destType.FullName}' received a null value. Check whether the template schema is correct.");
+        }
+
         object? convertResult;
         switch (srcValue)
         {
@@ -260,16 +302,5 @@ internal class ComponentFactory
         }
 
         return convertResult;
-    }
-
-    private bool TryGetDestPropertyFor(Type componentType, object destPropertyKey, out PropertyInfo? property)
-    {
-        // note: since ware deserializing yaml, propertyData.Key will always be string, this is precaution
-        var properties = _typePropertyCache.GetOrAdd(
-            componentType,
-            type => type.PropertiesWith(Flags.InstancePublic));
-
-        property = properties.FirstOrDefault(p => p.Name.Equals(destPropertyKey as string, StringComparison.InvariantCultureIgnoreCase));
-        return property != null;
     }
 }

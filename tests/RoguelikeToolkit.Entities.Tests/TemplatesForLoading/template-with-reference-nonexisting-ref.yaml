@@ -1,5 +1,5 @@
 EmbeddedTemplate2:
- $ref: TemplatesForLoading/non-existing-file.yaml
+ $ref: non-existing-file.yaml
  Components:
   barfoo:
     anotherStringProperty: defgh

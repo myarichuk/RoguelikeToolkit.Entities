@@ -8,7 +8,11 @@ using Microsoft.Extensions.Options;
 namespace RoguelikeToolkit.Entities.Factory
 {
     /// <summary>
-    /// A class used to set global components in the entity (components their instances would be shared between entities)
+    /// A class used to set global components in the entity (components their instances would be shared between entities).
+    /// Conflict semantics: first write wins. The world's copy is set by the first spawned entity that defines the
+    /// component; later spawns with different values are ignored, so every entity observes the same shared instance
+    /// (entities link to the world copy via <see cref="Entity.SetSameAsWorld{T}"/>, which snapshots the instance,
+    /// hence overwriting the world copy later would leave earlier entities with stale references).
     /// </summary>
     internal class GlobalComponentInEntitySetter : BaseComponentInEntitySetter
     {
@@ -66,6 +70,7 @@ namespace RoguelikeToolkit.Entities.Factory
             componentType.Attribute<ComponentAttribute>().IsGlobal;
 
         /// <inheritdoc/>
+        /// <remarks>First write wins: the world's copy is set only when absent, then the entity is linked to it.</remarks>
         internal override void SetComponent(in Entity entity, Type componentType, object componentInstance)
         {
             var genericWorldHasMethod = GetWorldHasMethod(componentType);

@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using RoguelikeToolkit.Entities.Components;
 using Xunit;
 
+#pragma warning disable CS1591
+
 namespace RoguelikeToolkit.Entities.Tests;
 
 public class TagsComponentTests

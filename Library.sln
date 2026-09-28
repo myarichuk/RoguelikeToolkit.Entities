@@ -6,6 +6,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RoguelikeToolkit.Entities",
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RoguelikeToolkit.Entities.Tests", "tests\RoguelikeToolkit.Entities.Tests\RoguelikeToolkit.Entities.Tests.csproj", "{98A9E87D-8A55-4BC0-AEA3-DD9F20E6A66F}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RoguelikeToolkit.Entities.Benchmarks", "benchmarks\RoguelikeToolkit.Entities.Benchmarks\RoguelikeToolkit.Entities.Benchmarks.csproj", "{7F11C7E3-F2A3-401B-B41A-65DA26219838}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{222FFFD2-D7D9-4951-BCF2-BD1684B01EBC}"
 	ProjectSection(SolutionItems) = preProject
 		.pre-commit-config.yaml = .pre-commit-config.yaml
@@ -26,6 +28,10 @@ Global
 		{98A9E87D-8A55-4BC0-AEA3-DD9F20E6A66F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{98A9E87D-8A55-4BC0-AEA3-DD9F20E6A66F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{98A9E87D-8A55-4BC0-AEA3-DD9F20E6A66F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7F11C7E3-F2A3-401B-B41A-65DA26219838}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7F11C7E3-F2A3-401B-B41A-65DA26219838}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7F11C7E3-F2A3-401B-B41A-65DA26219838}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7F11C7E3-F2A3-401B-B41A-65DA26219838}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
