@@ -5,15 +5,24 @@ namespace RoguelikeToolkit.Entities.Factory
     /// <summary>
     /// <see cref="EmbeddedTemplateGraphIterator"/> is a helper object used to traverse the <see cref="EntityTemplate"/> graph
     /// </summary>
-    /// <remarks>This object assumes it runs in a single thread</remarks>
+    /// <remarks>
+    /// This object assumes it runs in a single thread (a <see langword="readonly"/> struct over a mutable
+    /// pooled <see cref="Queue{T}"/>/<see cref="Stack{T}"/> cannot be shared across threads).
+    /// Pooled containers are <c>Clear</c>ed both before use and on <see cref="Dispose"/>, so a returned
+    /// container retains no template references.
+    /// </remarks>
     internal readonly struct EmbeddedTemplateGraphIterator : IDisposable
     {
         private static readonly ObjectPool<Queue<EntityTemplate>> QueuePool =
             ObjectPoolProvider.Instance.Create<Queue<EntityTemplate>>();
 
+        private static readonly ObjectPool<Stack<EntityTemplate>> StackPool =
+            ObjectPoolProvider.Instance.Create<Stack<EntityTemplate>>();
+
         private readonly EntityTemplate _root;
         private readonly GraphTraversalType _traversalType;
         private readonly Queue<EntityTemplate> _traversalQueue;
+        private readonly Stack<EntityTemplate> _traversalStack;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="EmbeddedTemplateGraphIterator"/> struct
@@ -25,6 +34,7 @@ namespace RoguelikeToolkit.Entities.Factory
             _root = root;
             _traversalType = traversalType;
             _traversalQueue = QueuePool.Get();
+            _traversalStack = StackPool.Get();
         }
 
         /// <summary>
@@ -47,14 +57,16 @@ namespace RoguelikeToolkit.Entities.Factory
             }
 
             _traversalQueue.Clear();
-            _traversalQueue.Enqueue(_root);
+            _traversalStack.Clear();
 
             switch (_traversalType)
             {
                 case GraphTraversalType.Bfs:
+                    _traversalQueue.Enqueue(_root);
                     TraverseBfs(visitorFunc);
                     break;
                 case GraphTraversalType.Dfs:
+                    _traversalStack.Push(_root);
                     TraverseDfs(visitorFunc);
                     break;
                 default:
@@ -63,8 +75,13 @@ namespace RoguelikeToolkit.Entities.Factory
         }
 
         /// <summary>Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.</summary>
-        public void Dispose() =>
+        public void Dispose()
+        {
+            _traversalQueue.Clear();
             QueuePool.Return(_traversalQueue);
+            _traversalStack.Clear();
+            StackPool.Return(_traversalStack);
+        }
 
         private void TraverseBfs(VisitorAction visitorFunc)
         {
@@ -80,14 +97,15 @@ namespace RoguelikeToolkit.Entities.Factory
 
         private void TraverseDfs(VisitorAction visitorFunc)
         {
-            while (_traversalQueue.TryDequeue(out var currentNode))
+            while (_traversalStack.TryPop(out var currentNode))
             {
-                foreach (var childNode in currentNode.EmbeddedTemplates)
-                {
-                    _traversalQueue.Enqueue(childNode);
-                }
-
                 visitorFunc(currentNode);
+
+                // push in reverse so that enumeration order is preserved when popping (pre-order DFS)
+                foreach (var childNode in currentNode.EmbeddedTemplates.Reverse())
+                {
+                    _traversalStack.Push(childNode);
+                }
             }
         }
     }

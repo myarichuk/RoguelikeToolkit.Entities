@@ -17,7 +17,7 @@ namespace RoguelikeToolkit.Entities.Extensions
         /// <param name="key">The key to look for.</param>
         /// <param name="valueFactory">A lambda to generate a value to fill if the key is not there</param>
         /// <returns>Either fetched or newly created value.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="Failed to read the key. This is not supposed to happen and is likely a misuse of the system."/> is <see langword="null"/></exception>
+        /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/></exception>
         /// <exception cref="Exception">A valueFactory might throw an exception!</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static TValue GetOrAdd<TKey, TValue>(this Dictionary<TKey, TValue> dict, TKey key, Func<TKey, TValue> valueFactory)
@@ -35,7 +35,7 @@ namespace RoguelikeToolkit.Entities.Extensions
             }
 
             var newValue = valueFactory(key);
-            dict.Add(key, newValue);
+            dict.TryAdd(key, newValue);
 
             return newValue;
         }
@@ -85,6 +85,13 @@ namespace RoguelikeToolkit.Entities.Extensions
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static void AddIfNotExists<TKey, TValue>(this IDictionary<TKey, TValue> dict, TKey key, TValue val)
         {
+            // Fast path: Dictionary.TryAdd hashes once instead of ContainsKey+Add hashing twice.
+            if (dict is Dictionary<TKey, TValue> concrete)
+            {
+                concrete.TryAdd(key, val);
+                return;
+            }
+
             if (!dict.ContainsKey(key))
             {
                 dict.Add(key, val);
@@ -103,7 +110,7 @@ namespace RoguelikeToolkit.Entities.Extensions
 
             foreach (var kvp in dict)
             {
-                result.Add(kvp.Key, kvp.Value);
+                result.Add(kvp.Key, kvp.Value!);
             }
 
             return result;
@@ -139,13 +146,14 @@ namespace RoguelikeToolkit.Entities.Extensions
                 throw new ArgumentNullException(nameof(key));
             }
 
-            if (dict.ContainsKey(key))
+            // Single lookup: TryGetValue instead of ContainsKey+indexer+Add (double/triple hashing).
+            if (dict.TryGetValue(key, out var existing))
             {
-                dict[key] = mutator(dict[key]);
+                dict[key] = mutator(existing);
             }
             else
             {
-                dict.Add(key, mutator(default!));
+                dict.TryAdd(key, mutator(default!));
             }
         }
     }

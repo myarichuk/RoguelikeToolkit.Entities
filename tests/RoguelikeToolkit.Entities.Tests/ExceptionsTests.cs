@@ -2,6 +2,8 @@ using System;
 using RoguelikeToolkit.Entities.Exceptions;
 using Xunit;
 
+#pragma warning disable CS1591
+
 namespace RoguelikeToolkit.Entities.Tests;
 
 public class ExceptionsTests

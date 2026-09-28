@@ -8,7 +8,10 @@ using RoguelikeToolkit.Entities.Repository;
 namespace RoguelikeToolkit.Entities.Factory;
 
 /// <summary>
-/// A factory class that constructs entities according to the defined templates
+/// A factory class that constructs entities according to the defined templates.
+/// Spawn cost per template is kept flat: inheritance is resolved once and cached
+/// (see <see cref="EntityInheritanceResolver"/>), and child entities are created by recursing
+/// into direct children only — no graph traversal or pooled-buffer rental happens per spawn.
 /// </summary>
 public class EntityFactory
 {
@@ -53,6 +56,14 @@ public class EntityFactory
                     (BaseComponentInEntitySetter)Activator.CreateInstance(type, world)!)
                 .ToList();
     }
+
+    /// <summary>
+    /// Clears the effective-template cache used when spawning. Plain loading of new templates
+    /// never requires this (repositories reject duplicate names); call it after mutating a loaded
+    /// template or to reclaim memory (e.g. on mod unload / hot-reload).
+    /// </summary>
+    public void InvalidateEffectiveTemplateCache() =>
+        _inheritanceResolver.InvalidateCache();
 
     /// <summary>
     /// Check whether specific <paramref name="entityName"/> exists in the repository or not
@@ -117,32 +128,59 @@ public class EntityFactory
         }
 #endif
 
-        // ReSharper disable once ExceptionNotDocumented (we make sure in code that TryGet template doesn't throw)
-        var effectiveRootTemplate = _inheritanceResolver.GetEffectiveTemplate(rootTemplate);
-
-        CreateEntity(effectiveRootTemplate, out var rootEntity);
-        entity = CreateChildEntities(effectiveRootTemplate, rootEntity);
-
-        return true;
+        return TryCreateCore(
+            rootTemplate,
+            out entity,
+            new HashSet<EntityTemplate>(ReferenceEqualityComparer<EntityTemplate>.Instance));
     }
 
-    private Entity CreateChildEntities(EntityTemplate effectiveRootTemplate, Entity rootEntity)
+    /// <summary>
+    /// Try create entity from a specified template. Cyclic embedded template references throw <see cref="InvalidOperationException"/>.
+    /// </summary>
+    /// <param name="rootTemplate">entity template to use</param>
+    /// <param name="entity"><see cref="Entity"/> instance - result of the construction</param>
+    /// <param name="creationChain">templates on the current creation stack, used for cycle detection</param>
+    /// <returns>true if creation succeeded, false otherwise</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="rootTemplate"/> is <see langword="null"/></exception>
+    /// <exception cref="InvalidOperationException">Cyclic embedded template reference detected.</exception>
+    private bool TryCreateCore(EntityTemplate rootTemplate, out Entity entity, HashSet<EntityTemplate> creationChain)
     {
-        var graphIterator = new EmbeddedTemplateGraphIterator(effectiveRootTemplate);
-
-        graphIterator.Traverse(template =>
+        if (!creationChain.Add(rootTemplate))
         {
-            if (template.Name == effectiveRootTemplate.Name)
-            {
-                return;
-            }
+            throw new InvalidOperationException(
+                $"Cyclic embedded template reference detected (template = '{rootTemplate.Name ?? "<unnamed>"}'). Check the embedded template hierarchy for a loop.");
+        }
 
-            template = _inheritanceResolver.GetEffectiveTemplate(template);
-            if (TryCreate(template, out var childEntity))
+        try
+        {
+            // ReSharper disable once ExceptionNotDocumented (we make sure in code that TryGet template doesn't throw)
+            var effectiveRootTemplate = _inheritanceResolver.GetEffectiveTemplate(rootTemplate);
+
+            CreateEntity(effectiveRootTemplate, out var rootEntity);
+            entity = CreateChildEntities(effectiveRootTemplate, rootEntity, creationChain);
+
+            return true;
+        }
+        finally
+        {
+            creationChain.Remove(rootTemplate);
+        }
+    }
+
+    private Entity CreateChildEntities(EntityTemplate effectiveRootTemplate, Entity rootEntity, HashSet<EntityTemplate> creationChain)
+    {
+        // Only direct children are created here; recursion via TryCreateCore handles deeper levels.
+        // (Traversing the whole subtree here would duplicate grandchildren, once per ancestor level.)
+        // Note: recursion uses the original (shared) child references, so the creation chain reliably
+        // detects cycles by reference. Name comparisons are deliberately avoided here: template names
+        // are case-insensitive identifiers and a child may legitimately share its parent's name.
+        foreach (var childTemplate in effectiveRootTemplate.EmbeddedTemplates)
+        {
+            if (TryCreateCore(childTemplate, out var childEntity, creationChain))
             {
                 rootEntity.SetAsParentOf(childEntity);
             }
-        });
+        }
 
         return rootEntity;
     }
@@ -155,6 +193,12 @@ public class EntityFactory
         foreach (var componentRawData in template.Components)
         {
             var componentType = GetComponentTypeOrThrow(componentRawData);
+
+            if (componentRawData.Value == null)
+            {
+                throw new InvalidOperationException(
+                    $"Component '{componentRawData.Key}' in template '{template.Name ?? "<unnamed>"}' has a null value. Check whether the template schema is correct.");
+            }
 
             var rawComponentType = componentRawData.Value.GetType();
             var componentInstance = CreateComponentInstance(rawComponentType, componentType, componentRawData);

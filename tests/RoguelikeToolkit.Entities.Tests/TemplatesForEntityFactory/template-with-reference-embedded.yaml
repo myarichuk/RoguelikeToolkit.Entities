@@ -3,10 +3,10 @@ Tags:
  - tag2
  - tag3
 EmbeddedTemplate1:
- $merge-ref: TemplatesForEntityFactory/embedded-template1.yaml
+ $merge-ref: embedded-template1.yaml
 EmbeddedTemplate2:
- $ref: TemplatesForEntityFactory/embedded-template3.yaml
- $merge-ref: TemplatesForEntityFactory/embedded-template2.yaml
+ $ref: embedded-template3.yaml
+ $merge-ref: embedded-template2.yaml
  Components:
   barfoo:
     anotherStringProperty: defgh

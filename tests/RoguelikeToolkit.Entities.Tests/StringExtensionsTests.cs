@@ -1,6 +1,8 @@
 using RoguelikeToolkit.Entities.Extensions;
 using Xunit;
 
+#pragma warning disable CS1591
+
 namespace RoguelikeToolkit.Entities.Tests;
 
 public class StringExtensionsTests

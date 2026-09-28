@@ -15,19 +15,71 @@ namespace RoguelikeToolkit.Entities.Tests
         private readonly EntityTemplateLoader _loader = new();
 
         [Fact]
-        public void Can_load_empty_yaml()
+        public void Should_fail_loading_empty_yaml()
         {
-            var template = _loader.LoadFrom(new FileInfo(Path.Combine("TemplatesForLoading", "empty-y.yaml")));
-            Assert.NotNull(template);
-            Assert.Empty(template.Inherits);
+            Assert.Throws<FailedToParseException>(() =>
+                _loader.LoadFrom(new FileInfo(Path.Combine("TemplatesForLoading", "empty-y.yaml"))));
         }
 
         [Fact]
-        public void Can_load_empty_json()
+        public void Should_fail_loading_empty_json()
         {
-            var template = _loader.LoadFrom(new FileInfo(Path.Combine("TemplatesForLoading", "empty-j.json")));
+            Assert.Throws<FailedToParseException>(() =>
+                _loader.LoadFrom(new FileInfo(Path.Combine("TemplatesForLoading", "empty-j.json"))));
+        }
+
+        [Fact]
+        public void Bare_ref_resolves_against_template_directory()
+        {
+            // other.yaml exists only next to main.yaml, not in the working directory,
+            // so this passes only when $ref is resolved against the template's own folder
+            var template = _loader.LoadFrom(new FileInfo(Path.Combine("TemplatesForLoading", "Refs", "main.yaml")));
             Assert.NotNull(template);
-            Assert.Empty(template.Inherits);
+
+            var child = Assert.Single(template.EmbeddedTemplates);
+            var grandchild = Assert.Single(child.EmbeddedTemplates);
+            Assert.Contains("other-foobar", grandchild.Components.Keys);
+        }
+
+        [Fact]
+        public void Should_fail_loading_ref_to_empty_template()
+        {
+            Assert.Throws<FailedToParseException>(() =>
+                _loader.LoadFrom(new FileInfo(Path.Combine("TemplatesForLoading", "Refs", "ref-to-empty.yaml"))));
+        }
+
+        [Fact]
+        public void Should_fail_loading_cyclic_ref()
+        {
+            Assert.Throws<FailedToParseException>(() =>
+                _loader.LoadFrom(new FileInfo(Path.Combine("TemplatesForLoading", "Refs", "cycle-a.yaml"))));
+        }
+
+        [Fact]
+        public void Should_fail_loading_non_string_tags()
+        {
+            using var stream = new MemoryStream(
+                System.Text.Encoding.UTF8.GetBytes("Tags:\n - 123\nComponents:\n foo: bar\n"));
+            using var reader = new StreamReader(stream);
+            Assert.Throws<FailedToParseException>(() => _loader.LoadFrom(reader));
+        }
+
+        [Fact]
+        public void Should_fail_loading_scalar_tags()
+        {
+            using var stream = new MemoryStream(
+                System.Text.Encoding.UTF8.GetBytes("Tags: tag1\nComponents:\n foo: bar\n"));
+            using var reader = new StreamReader(stream);
+            Assert.Throws<FailedToParseException>(() => _loader.LoadFrom(reader));
+        }
+
+        [Fact]
+        public void Should_fail_loading_scalar_components()
+        {
+            using var stream = new MemoryStream(
+                System.Text.Encoding.UTF8.GetBytes("Components: nope\n"));
+            using var reader = new StreamReader(stream);
+            Assert.Throws<FailedToParseException>(() => _loader.LoadFrom(reader));
         }
 
         [Fact]

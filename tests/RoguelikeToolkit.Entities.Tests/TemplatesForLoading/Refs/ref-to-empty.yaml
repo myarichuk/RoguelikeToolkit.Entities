@@ -1,0 +1,6 @@
+ChildFromEmpty:
+ $ref: empty-target.yaml
+Components:
+ foobar:
+  stringProperty: abcdef
+  numProperty: 123

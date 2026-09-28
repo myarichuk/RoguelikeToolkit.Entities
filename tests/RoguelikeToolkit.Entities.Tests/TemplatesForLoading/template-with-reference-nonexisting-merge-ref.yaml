@@ -1,5 +1,5 @@
 EmbeddedTemplate2:
- $merge-ref: TemplatesForLoading/non-existing-file.yaml
+ $merge-ref: non-existing-file.yaml
  Components:
   barfoo:
     anotherStringProperty: defgh

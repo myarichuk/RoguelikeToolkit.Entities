@@ -1,0 +1,6 @@
+LoopA:
+ $ref: cycle-b.yaml
+Components:
+ foobar:
+  stringProperty: abcdef
+  numProperty: 123

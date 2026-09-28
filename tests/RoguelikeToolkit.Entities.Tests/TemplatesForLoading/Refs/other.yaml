@@ -1,0 +1,4 @@
+Components:
+ other-foobar:
+  stringProperty: from-other-file
+  numProperty: 42

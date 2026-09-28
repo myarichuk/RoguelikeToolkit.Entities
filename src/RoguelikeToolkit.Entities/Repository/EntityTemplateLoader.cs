@@ -17,8 +17,6 @@ internal class EntityTemplateLoader
         Options = ConversionOptions.UseDefaultFormatIfNotSpecified,
     }));
 
-    private static readonly HashSet<string> EmptyHashSet = new();
-
     private readonly IDeserializer _deserializer = new DeserializerBuilder()
         .IgnoreUnmatchedProperties()
         .IgnoreFields()
@@ -26,22 +24,26 @@ internal class EntityTemplateLoader
         .Build();
 
     /// <summary>
-    /// Load template from file
+    /// Load template from file.
+    /// Relative <c>$ref</c>/<c>$merge-ref</c> paths inside the template are resolved against the directory of <paramref name="file"/>.
     /// </summary>
     /// <param name="file">template file to load</param>
     /// <returns>loaded template</returns>
     /// <exception cref="FileNotFoundException">Failed to find template file at specified path.</exception>
     /// <exception cref="InvalidOperationException">Failed to open template file (environmental reason - path too long, security, etc)</exception>
     /// <exception cref="IOException">Failed to open template file</exception>
+    /// <exception cref="FailedToParseException">The template is empty or failed to parse.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public EntityTemplate? LoadFrom(FileInfo file)
     {
         try
         {
-            using var fs = file.OpenRead();
-            using var sr = new StreamReader(fs);
+            var referenceChain = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                Path.GetFullPath(file.FullName),
+            };
 
-            return LoadFrom(sr);
+            return LoadFrom(file, referenceChain);
         }
         catch (DirectoryNotFoundException e)
         {
@@ -90,60 +92,143 @@ internal class EntityTemplateLoader
     }
 
     /// <summary>
-    /// Load template from file
+    /// Load template from a stream. Relative <c>$ref</c>/<c>$merge-ref</c> paths are resolved
+    /// against the process working directory since a stream carries no directory context.
+    /// Prefer the <see cref="FileInfo"/> overload when loading from files.
     /// </summary>
     /// <param name="sr">template file to load</param>
     /// <returns>loaded template</returns>
     /// <exception cref="FailedToParseException">Failed to parse the template for any reason.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public EntityTemplate? LoadFrom(StreamReader sr)
-    {
-        var rawTemplate = _deserializer.Deserialize<Dictionary<string, object>>(sr);
+    public EntityTemplate? LoadFrom(StreamReader sr) =>
+        LoadFrom(sr, baseDirectory: null, referenceChain: new HashSet<string>(StringComparer.OrdinalIgnoreCase));
 
-        return TryLoadFrom(rawTemplate, out var template, out var failureReason)
-            ? template
-            : throw new FailedToParseException(failureReason ?? "unhandled error");
-    }
-
-    private static bool TryHandlePropertyValue(EntityTemplate template, string propertyName, object propertyValue)
+    private static bool TryHandlePropertyValue(EntityTemplate template, string propertyName, object? propertyValue, out string? failureReason)
     {
+        failureReason = null;
         switch (propertyName)
         {
             case nameof(EntityTemplate.Tags):
-                var tagsCollectionValue = propertyValue is List<object> tagsObjects
-                    ? new HashSet<string>(tagsObjects.Cast<string>())
-                    : EmptyHashSet;
-                template.MergeTags(tagsCollectionValue);
-                break;
-            case nameof(EntityTemplate.Inherits):
-                var inheritsCollectionValue = propertyValue is List<object> inheritsObjects
-                    ? new HashSet<string>(inheritsObjects.Cast<string>())
-                    : EmptyHashSet;
-                template.MergeInherits(inheritsCollectionValue);
-                break;
-            case nameof(EntityTemplate.Components):
-                var componentsValue = propertyValue is not Dictionary<object, object> components
-                    ? null
-                    : components.ToDictionary(
-                        kvp => TypeConversionProvider.ConvertToString(kvp.Key),
-                        kvp => kvp.Value);
-                if (componentsValue == null)
+                if (propertyValue is not List<object> tagsObjects)
                 {
+                    failureReason = "Property 'Tags' must be a list of strings.";
                     return false;
                 }
 
-                template.MergeComponents(componentsValue);
+                foreach (var tagObject in tagsObjects)
+                {
+                    if (tagObject is not string tag)
+                    {
+                        failureReason = $"Property 'Tags' must contain only strings (found '{tagObject ?? "<null>"}').";
+                        return false;
+                    }
+
+                    template.AddTag(tag);
+                }
+
+                break;
+            case nameof(EntityTemplate.Inherits):
+                if (propertyValue is not List<object> inheritsObjects)
+                {
+                    failureReason = "Property 'Inherits' must be a list of strings.";
+                    return false;
+                }
+
+                foreach (var inheritObject in inheritsObjects)
+                {
+                    if (inheritObject is not string inheritedTemplateName)
+                    {
+                        failureReason = $"Property 'Inherits' must contain only strings (found '{inheritObject ?? "<null>"}').";
+                        return false;
+                    }
+
+                    template.AddInherit(inheritedTemplateName);
+                }
+
+                break;
+            case nameof(EntityTemplate.Components):
+                if (propertyValue is not Dictionary<object, object> components)
+                {
+                    failureReason = "Property 'Components' must be a mapping of component names to component data.";
+                    return false;
+                }
+
+                foreach (var kvp in components)
+                {
+                    string componentName;
+                    try
+                    {
+                        componentName = TypeConversionProvider.ConvertToString(kvp.Key);
+                    }
+                    catch (Exception e)
+                    {
+                        failureReason = $"Failed to read a component name in 'Components' (key = '{kvp.Key ?? "<null>"}'). Reason: {e.Message}";
+                        return false;
+                    }
+
+                    if (!template.AddComponent(componentName, kvp.Value))
+                    {
+                        failureReason = $"Duplicate component name '{componentName}' in 'Components'. Component names must be unique within a template.";
+                        return false;
+                    }
+                }
+
                 break;
             default:
+                failureReason = $"Unrecognized property name {propertyName}, this is not supposed to happen and is likely a bug";
                 return false;
         }
 
         return true;
     }
 
+    private static bool IsRefMetaProperty(string key) =>
+        key.Equals("$ref", StringComparison.InvariantCultureIgnoreCase);
+
+    private static bool IsMergeRefMetaProperty(string key) =>
+        key.Equals("$merge-ref", StringComparison.InvariantCultureIgnoreCase);
+
+    private static string ResolveReferencePath(string referencedPath, string? baseDirectory)
+    {
+        var combined = Path.IsPathRooted(referencedPath) || string.IsNullOrEmpty(baseDirectory)
+            ? referencedPath
+            : Path.Combine(baseDirectory, referencedPath);
+
+        return Path.GetFullPath(combined);
+    }
+
+    /// <summary>
+    /// Load template from file, tracking the <c>$ref</c> resolution chain for cycle detection.
+    /// </summary>
+    /// <param name="file">template file to load.</param>
+    /// <param name="referenceChain">absolute paths of templates currently being resolved above this call.</param>
+    /// <returns>loaded template.</returns>
+    private EntityTemplate? LoadFrom(FileInfo file, HashSet<string> referenceChain)
+    {
+        using var fs = file.OpenRead();
+        using var sr = new StreamReader(fs);
+
+        return LoadFrom(sr, file.DirectoryName, referenceChain);
+    }
+
+    private EntityTemplate? LoadFrom(StreamReader sr, string? baseDirectory, HashSet<string> referenceChain)
+    {
+        var rawTemplate = _deserializer.Deserialize<Dictionary<string, object>>(sr);
+
+        if (rawTemplate == null || rawTemplate.Count == 0)
+        {
+            throw new FailedToParseException("The template is empty. Empty templates are not allowed, check whether the template file has valid content.");
+        }
+
+        return TryLoadFrom(rawTemplate, baseDirectory, referenceChain, out var template, out var failureReason)
+            ? template
+            : throw new FailedToParseException(failureReason ?? "unhandled error");
+    }
+
     // ReSharper disable once CognitiveComplexity
     // ReSharper disable once MethodTooLong
-    private bool TryLoadFrom(Dictionary<string, object> rawTemplateData, out EntityTemplate template, out string? failureReason)
+    // ReSharper disable once TooManyArguments
+    private bool TryLoadFrom(Dictionary<string, object> rawTemplateData, string? baseDirectory, HashSet<string> referenceChain, out EntityTemplate template, out string? failureReason)
     {
         template = new EntityTemplate();
         failureReason = null;
@@ -153,31 +238,33 @@ internal class EntityTemplateLoader
         {
             if (EntityTemplate.PropertyNames.TryGetValue(kvp.Key, out var properlyCasedPropertyName))
             {
-                if (TryHandlePropertyValue(template, properlyCasedPropertyName, kvp.Value))
+                if (TryHandlePropertyValue(template, properlyCasedPropertyName, kvp.Value, out var propertyFailureReason))
                 {
                     continue;
                 }
 
-                failureReason = $"Unrecognized property name {kvp.Key}, this is not supposed to happen and is likely a bug";
+                failureReason = propertyFailureReason;
                 return false;
             }
 
             if (kvp.Key is { } keyAsString &&
-                kvp.Value is string referencedTemplateFilename) // just in case
+                (IsRefMetaProperty(keyAsString) || IsMergeRefMetaProperty(keyAsString)))
             {
-                if (ТryHandleMetaProperty(template, referencedTemplateFilename, keyAsString))
+                if (kvp.Value is not string referencedTemplateFilename)
                 {
-                    continue;
+                    failureReason = $"Meta-property '{keyAsString}' must specify a template file path as a string.";
+                    return false;
                 }
 
-                failureReason = $"Unrecognized meta-property '{keyAsString}' in a template field. Property name must be either '$ref' or '$merge-ref'";
-                return false;
+                // throws FileNotFoundException/FailedToParseException/IOException on problems, never silently drops the reference
+                TryHandleMetaProperty(template, referencedTemplateFilename, keyAsString, baseDirectory, referenceChain);
+                continue;
             }
 
             // we have a embedded template
             if (kvp.Value is Dictionary<object, object> rawEmbeddedTemplate)
             {
-                if (TryHandleEmbeddedTemplate(template, kvp.Key, rawEmbeddedTemplate, out var templateLoadFailureReason))
+                if (TryHandleEmbeddedTemplate(template, kvp.Key, rawEmbeddedTemplate, baseDirectory, referenceChain, out var templateLoadFailureReason))
                 {
                     continue;
                 }
@@ -194,66 +281,61 @@ internal class EntityTemplateLoader
         return true;
     }
 
-    private bool ТryHandleMetaProperty(EntityTemplate template, string referencedTemplateFilename, string keyAsString)
+    // ReSharper disable once TooManyArguments
+    private void TryHandleMetaProperty(EntityTemplate template, string referencedTemplateFilename, string keyAsString, string? baseDirectory, HashSet<string> referenceChain)
     {
-        if (IsRefMetaProperty(keyAsString))
+        var resolvedPath = ResolveReferencePath(referencedTemplateFilename, baseDirectory);
+
+        if (!referenceChain.Add(resolvedPath))
         {
-            var embeddedTemplate = LoadFrom(referencedTemplateFilename);
-            if (embeddedTemplate == null)
-            {
-                return true;
-            }
-
-            embeddedTemplate.Name = referencedTemplateFilename;
-#if NET5_0_OR_GREATER
-            ((HashSet<EntityTemplate>)template.EmbeddedTemplates).Add(embeddedTemplate);
-#else
-            template.EmbeddedTemplates.Add(embeddedTemplate);
-#endif
-
-            return true;
+            throw new FailedToParseException($"Cyclic template reference detected ('{referencedTemplateFilename}'). Check the '$ref'/'$merge-ref' chain for a loop.");
         }
 
-        if (IsMergeRefMetaProperty(keyAsString))
+        try
         {
-            var embeddedTemplate = LoadFrom(referencedTemplateFilename);
-            if (embeddedTemplate == null)
+            if (IsRefMetaProperty(keyAsString))
             {
-                return true;
+                var embeddedTemplate = LoadFrom(new FileInfo(resolvedPath), referenceChain)
+                    ?? throw new FailedToParseException($"Referenced template '{referencedTemplateFilename}' loaded as null. This is not supposed to happen and is likely a bug.");
+
+                embeddedTemplate.Name = referencedTemplateFilename;
+                template.AddEmbeddedTemplate(embeddedTemplate);
+
+                return;
             }
 
-            embeddedTemplate.Name = referencedTemplateFilename;
-            template.MergeWith(embeddedTemplate);
+            if (IsMergeRefMetaProperty(keyAsString))
+            {
+                var embeddedTemplate = LoadFrom(new FileInfo(resolvedPath), referenceChain)
+                    ?? throw new FailedToParseException($"Referenced template '{referencedTemplateFilename}' loaded as null. This is not supposed to happen and is likely a bug.");
 
-            return true;
+                embeddedTemplate.Name = referencedTemplateFilename;
+                template.MergeWith(embeddedTemplate);
+
+                return;
+            }
+
+            throw new FailedToParseException($"Unrecognized meta-property '{keyAsString}' in a template field. Property name must be either '$ref' or '$merge-ref'");
         }
-
-        return false;
-
-        bool IsRefMetaProperty(string key) =>
-            key.Equals("$ref", StringComparison.InvariantCultureIgnoreCase);
-
-        bool IsMergeRefMetaProperty(string key) =>
-            key.Equals("$merge-ref", StringComparison.InvariantCultureIgnoreCase);
+        finally
+        {
+            referenceChain.Remove(resolvedPath);
+        }
     }
 
     // ReSharper disable once TooManyArguments
-    private bool TryHandleEmbeddedTemplate(EntityTemplate template, string embeddedTemplateName, Dictionary<object, object> rawTemplateData, out string? failureReason)
+    private bool TryHandleEmbeddedTemplate(EntityTemplate template, string embeddedTemplateName, Dictionary<object, object> rawTemplateData, string? baseDirectory, HashSet<string> referenceChain, out string? failureReason)
     {
         failureReason = null;
         if (!TryLoadFrom(
-                rawTemplateData.ToDictionary(valuePair => TypeConversionProvider.ConvertToString(valuePair.Key), valuePair => valuePair.Value), out var embeddedTemplate, out var loadFailureReason))
+                rawTemplateData.ToDictionary(valuePair => TypeConversionProvider.ConvertToString(valuePair.Key), valuePair => valuePair.Value), baseDirectory, referenceChain, out var embeddedTemplate, out var loadFailureReason))
         {
             failureReason = loadFailureReason;
             return false;
         }
 
         embeddedTemplate.Name = embeddedTemplateName;
-#if NET5_0_OR_GREATER
-        ((HashSet<EntityTemplate>)template.EmbeddedTemplates).Add(embeddedTemplate);
-#else
-        template.EmbeddedTemplates.Add(embeddedTemplate);
-#endif
+        template.AddEmbeddedTemplate(embeddedTemplate);
 
         return true;
     }
