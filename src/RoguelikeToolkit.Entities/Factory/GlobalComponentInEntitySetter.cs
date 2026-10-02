@@ -32,10 +32,7 @@ namespace RoguelikeToolkit.Entities.Factory
             typeof(World).Methods(nameof(DefaultEcs.World.Has))
                 .FirstOrDefault();
 
-        private readonly TypeConversionProvider _typeConversionProvider = new(Options.Create(new TypeConversionProviderOptions
-        {
-            Options = ConversionOptions.UseDefaultFormatIfNotSpecified,
-        }));
+        private readonly TypeConversionProvider _typeConversionProvider = TypeConversionProviderFactory.SharedBase;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="GlobalComponentInEntitySetter"/> class
@@ -45,7 +42,7 @@ namespace RoguelikeToolkit.Entities.Factory
         public GlobalComponentInEntitySetter(World world)
             : base(world)
         {
-            if (EntitySetSameAsWorldMethodCache == null)
+            if (EntitySetSameAsWorldMethod == null)
             {
                 throw new InvalidOperationException(
                     "Failed to detect Entity::SetSameAsWorld<T>() method, this probably means DefaultEcs was updated and had a breaking change. This is not supposed to happen and should be reported");
@@ -83,6 +80,12 @@ namespace RoguelikeToolkit.Entities.Factory
                 genericWorldSetMethod.Call(
                     World,
                     _typeConversionProvider.Convert(typeof(object), componentType, componentInstance));
+            }
+            else
+            {
+                EntityDiagnostics.Warn(
+                    $"Global component '{componentType.FullName}' is already set on the world; the value from this spawn was ignored (first write wins). " +
+                    "Remove the duplicate global component from the template if the warning is unexpected.");
             }
 
             var genericSetSameAsWorldMethod = GetSameAsWorldMethod(componentType);

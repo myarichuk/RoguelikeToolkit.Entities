@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Security;
 using RoguelikeToolkit.Entities.Exceptions;
+using RoguelikeToolkit.Entities.Extensions;
 
 namespace RoguelikeToolkit.Entities.Repository;
 
@@ -38,14 +39,7 @@ public class EntityTemplateRepository
     /// <exception cref="FailedToParseException">The template seems to be loaded but it is null, probably due to parsing errors.</exception>
     public bool TryGetByName(string templateName, out EntityTemplate template)
     {
-#if NET5_0_OR_GREATER
-        ArgumentNullException.ThrowIfNull(templateName);
-#else
-        if (templateName == null)
-        {
-            throw new ArgumentNullException(nameof(templateName));
-        }
-#endif
+        ArgumentGuard.ThrowIfNull(templateName, nameof(templateName));
 
         var hasFound = _entityRepository.TryGetValue(templateName, out template!);
 
@@ -70,14 +64,7 @@ public class EntityTemplateRepository
     /// <exception cref="ArgumentNullException"><paramref name="tags"/> or any of it's items is <see langword="null"/></exception>
     public IEnumerable<EntityTemplate> GetByTags(params string[] tags)
     {
-#if NET5_0_OR_GREATER
-        ArgumentNullException.ThrowIfNull(tags);
-#else
-        if (tags == null)
-        {
-            throw new ArgumentNullException(nameof(tags));
-        }
-#endif
+        ArgumentGuard.ThrowIfNull(tags, nameof(tags));
 
         if (tags.Any(t => t == null))
         {
@@ -135,14 +122,7 @@ public class EntityTemplateRepository
     /// <exception cref="FailedToParseException">Failed to parse the template for any reason.</exception>
     public void LoadTemplate(string templateName, StreamReader reader)
     {
-#if NET5_0_OR_GREATER
-        ArgumentNullException.ThrowIfNull(templateName);
-#else
-        if (templateName == null)
-        {
-            throw new ArgumentNullException(nameof(templateName));
-        }
-#endif
+        ArgumentGuard.ThrowIfNull(templateName, nameof(templateName));
 
         var template = _loader.LoadFrom(reader)
             ?? throw new FailedToParseException(templateName, "The template loaded as null, probably due to parsing errors. This is not supposed to happen and is likely a bug.");
@@ -157,7 +137,80 @@ public class EntityTemplateRepository
             throw new TemplateAlreadyExistsException(templateName);
         }
 
+        template.MarkShared();
         AddToTagIndex(templateName, template);
+    }
+
+    /// <summary>
+    /// Load template into the repository from an in-memory string (yaml or json content).
+    /// Useful for tests, mods received over the network, and generated templates.
+    /// </summary>
+    /// <param name="templateName">name of the template to assign when storing it in the repository</param>
+    /// <param name="templateContent">template content in yaml or json format</param>
+    /// <exception cref="TemplateAlreadyExistsException">Template with specified name already exists.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="templateName"/> or <paramref name="templateContent"/> is <see langword="null"/></exception>
+    /// <exception cref="FailedToParseException">Failed to parse the template for any reason.</exception>
+    public void LoadTemplate(string templateName, string templateContent)
+    {
+        ArgumentGuard.ThrowIfNull(templateName, nameof(templateName));
+        ArgumentGuard.ThrowIfNull(templateContent, nameof(templateContent));
+
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(templateContent));
+        using var reader = new StreamReader(stream, System.Text.Encoding.UTF8);
+        LoadTemplate(templateName, reader);
+    }
+
+    /// <summary>
+    /// Add an already built template to the repository under the specified name.
+    /// A defensive copy is stored, so later mutations of <paramref name="template"/>
+    /// never affect the repository (clone-on-write at the ownership boundary).
+    /// Use <see cref="EntityTemplate.Copy"/> to derive variants ("different mobs")
+    /// from repository templates and store them back through this method.
+    /// </summary>
+    /// <param name="templateName">name of the template to assign when storing it in the repository</param>
+    /// <param name="template">template to store a copy of</param>
+    /// <exception cref="TemplateAlreadyExistsException">Template with specified name already exists.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="templateName"/> or <paramref name="template"/> is <see langword="null"/></exception>
+    public void AddTemplate(string templateName, EntityTemplate template)
+    {
+        ArgumentGuard.ThrowIfNull(templateName, nameof(templateName));
+        ArgumentGuard.ThrowIfNull(template, nameof(template));
+
+        var stored = template.Copy();
+        if (string.IsNullOrWhiteSpace(stored.Name))
+        {
+            stored.Name = templateName;
+        }
+
+        if (!_entityRepository.TryAdd(templateName, stored))
+        {
+            throw new TemplateAlreadyExistsException(templateName);
+        }
+
+        stored.MarkShared();
+        AddToTagIndex(templateName, stored);
+    }
+
+    /// <summary>
+    /// Remove a template from the repository, together with its tag index entries.
+    /// Returns false when no template with such name exists. After removal, call
+    /// <c>EntityFactory.InvalidateEffectiveTemplateCache</c> on live factories: cached
+    /// effective templates may still reference the removed template.
+    /// </summary>
+    /// <param name="templateName">name of the template to remove</param>
+    /// <returns>true if a template was removed, false otherwise</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="templateName"/> is <see langword="null"/></exception>
+    public bool RemoveTemplate(string templateName)
+    {
+        ArgumentGuard.ThrowIfNull(templateName, nameof(templateName));
+
+        if (!_entityRepository.TryRemove(templateName, out var removed))
+        {
+            return false;
+        }
+
+        RemoveFromTagIndex(templateName, removed);
+        return true;
     }
 
     /// <summary>
@@ -179,22 +232,16 @@ public class EntityTemplateRepository
     /// <exception cref="FailedToParseException">Failed to parse the template for any reason.</exception>
     public void LoadTemplate(FileInfo templateFile)
     {
-#if NET5_0_OR_GREATER
-        ArgumentNullException.ThrowIfNull(templateFile);
-#else
-        if (templateFile == null)
-        {
-            throw new ArgumentNullException(nameof(templateFile));
-        }
-#endif
+        ArgumentGuard.ThrowIfNull(templateFile, nameof(templateFile));
 
-        var (templateName, template) = ParseTemplateFile(templateFile);
+        var (templateName, template) = ParseTemplateFile(templateFile, new EntityTemplateLoader());
 
         if (!_entityRepository.TryAdd(templateName, template))
         {
             throw new TemplateAlreadyExistsException(templateName);
         }
 
+        template.MarkShared();
         AddToTagIndex(templateName, template);
     }
 
@@ -216,14 +263,7 @@ public class EntityTemplateRepository
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void LoadTemplate(string templateFilename)
     {
-#if NET5_0_OR_GREATER
-        ArgumentNullException.ThrowIfNull(templateFilename);
-#else
-        if (templateFilename == null)
-        {
-            throw new ArgumentNullException(nameof(templateFilename));
-        }
-#endif
+        ArgumentGuard.ThrowIfNull(templateFilename, nameof(templateFilename));
 
         LoadTemplate(new FileInfo(templateFilename));
     }
@@ -277,14 +317,7 @@ public class EntityTemplateRepository
     /// <exception cref="InvalidOperationException">Template files must have either 'yaml' or 'json' extensions</exception>
     public void LoadTemplateFolder(string templateFolder, CancellationToken cancellationToken)
     {
-#if NET5_0_OR_GREATER
-        ArgumentNullException.ThrowIfNull(templateFolder);
-#else
-        if (templateFolder == null)
-        {
-            throw new ArgumentNullException(nameof(templateFolder));
-        }
-#endif
+        ArgumentGuard.ThrowIfNull(templateFolder, nameof(templateFolder));
 
         var di = new DirectoryInfo(templateFolder);
         if (!di.Exists)
@@ -295,7 +328,11 @@ public class EntityTemplateRepository
         var files = EnumerateTemplateFiles(di).ToList();
         cancellationToken.ThrowIfCancellationRequested();
 
-        // parse phase (parallel, no repository mutation so failures leave the repository untouched)
+        // parse phase (parallel, no repository mutation so failures leave the repository untouched).
+        // loaders are pooled per worker thread: building the YamlDotNet deserializer
+        // dominates per-file cost, and instances are confined to one thread each, so no
+        // thread-safety claim on the deserializer itself is needed.
+        using var loaders = new ThreadLocal<EntityTemplateLoader>(() => new EntityTemplateLoader(), trackAllValues: false);
         var parsed = new (string TemplateName, EntityTemplate Template)[files.Count];
         var errors = new ConcurrentQueue<Exception>();
         Parallel.For(
@@ -306,7 +343,7 @@ public class EntityTemplateRepository
             {
                 try
                 {
-                    parsed[i] = ParseTemplateFile(files[i]);
+                    parsed[i] = ParseTemplateFile(files[i], loaders.Value!);
                 }
                 catch (Exception e) when (e is not OperationCanceledException)
                 {
@@ -332,10 +369,26 @@ public class EntityTemplateRepository
             }
         }
 
+        var committed = new List<(string TemplateName, EntityTemplate Template)>(parsed.Length);
         foreach (var (templateName, template) in parsed)
         {
-            _entityRepository.TryAdd(templateName, template);
+            // Re-check under racing loads: another thread may have stored the same name
+            // after validation. On conflict roll back this batch (repository and tag index)
+            // so the load stays atomic instead of silently dropping a template.
+            if (!_entityRepository.TryAdd(templateName, template))
+            {
+                foreach (var (committedName, committedTemplate) in committed)
+                {
+                    _entityRepository.TryRemove(committedName, out _);
+                    RemoveFromTagIndex(committedName, committedTemplate);
+                }
+
+                throw new TemplateAlreadyExistsException(templateName);
+            }
+
+            template.MarkShared();
             AddToTagIndex(templateName, template);
+            committed.Add((templateName, template));
         }
     }
 
@@ -357,7 +410,7 @@ public class EntityTemplateRepository
         di.EnumerateFiles("*", SearchOption.AllDirectories)
             .Where(file => HasValidExtension(file.Extension));
 
-    private static (string TemplateName, EntityTemplate Template) ParseTemplateFile(FileInfo templateFile)
+    private static (string TemplateName, EntityTemplate Template) ParseTemplateFile(FileInfo templateFile, EntityTemplateLoader loader)
     {
         if (!templateFile.Exists)
         {
@@ -369,9 +422,11 @@ public class EntityTemplateRepository
             throw new InvalidOperationException($"Template files must have either {string.Join("or", ValidExtensions)} extensions");
         }
 
-        // note: a fresh loader per file, YamlDotNet deserializer instances are not documented as thread-safe.
-        // note 2: the FileInfo overload (not the stream one) is used so that $ref paths resolve against the file's directory.
-        var template = new EntityTemplateLoader().LoadFrom(templateFile)
+        // note: the FileInfo overload (not the stream one) is used so that $ref paths resolve against the file's directory.
+        // The loader must not be shared across threads (YamlDotNet deserializer instances are not
+        // documented as thread-safe); folder loads pass one loader per worker thread, single-file
+        // loads pass a fresh instance.
+        var template = loader.LoadFrom(templateFile)
             ?? throw new FailedToParseException(templateFile.FullName, "The template loaded as null, probably due to parsing errors. This is not supposed to happen and is likely a bug.");
 
         var dot = templateFile.Name.LastIndexOf('.');
@@ -392,6 +447,17 @@ public class EntityTemplateRepository
             _tagIndex
                 .GetOrAdd(tag, _ => new ConcurrentDictionary<string, byte>(StringComparer.InvariantCultureIgnoreCase))
                 .TryAdd(templateName, 0);
+        }
+    }
+
+    private void RemoveFromTagIndex(string templateName, EntityTemplate template)
+    {
+        foreach (var tag in template.Tags)
+        {
+            if (_tagIndex.TryGetValue(tag, out var names))
+            {
+                names.TryRemove(templateName, out _);
+            }
         }
     }
 }

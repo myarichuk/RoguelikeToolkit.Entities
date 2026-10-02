@@ -80,6 +80,11 @@ namespace RoguelikeToolkit.Entities.Factory
                 new HashSet<string>(StringComparer.InvariantCultureIgnoreCase),
                 new HashSet<EntityTemplate>(ReferenceEqualityComparer<EntityTemplate>.Instance));
 
+            // The resolved template is shared (flyweight): callers must treat it as read-only
+            // and use EntityTemplate.Copy() to derive variants. Marking it makes accidental
+            // mutation warn through EntityDiagnostics instead of silently corrupting the cache.
+            resolved.MarkShared();
+
             if (isCanonical)
             {
                 _namedEffectiveCache.TryAdd(flatTemplate.Name!, resolved);

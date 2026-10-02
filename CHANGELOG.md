@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### :sparkles: Features
+- `EntityTemplate.Copy()` creates an editable, unshared variant of a template ("different mobs").
+- `EntityTemplateRepository.AddTemplate` stores a defensive copy (clone-on-write at the ownership boundary).
+- `EntityTemplateRepository.RemoveTemplate` removes a template together with its tag index entries.
+- `EntityTemplateRepository.LoadTemplate` overload accepting in-memory yaml/json string content.
+- Shared templates (repository store, effective-template cache) stay shared (flyweight) for reads; mutating one warns through `EntityDiagnostics` (silent by default) instead of corrupting state silently.
+
+### :bug: Fixes
+- `EntityExtensions` child iterator no longer leaks pooled traversal state between calls; tagless entities share an immutable empty tag set; parent-link bookkeeping is thread-safe.
+- `GlobalComponentInEntitySetter` actually validates the resolved `SetSameAsWorld` method and warns when a later global value is ignored (first write wins).
+- Folder loads stay atomic under racing loads (conflicting batch is rolled back, duplicate raises).
+- Duplicate embedded template names and duplicate case-only component properties now warn/fail instead of silently dropping data.
+- Single `TypeConversionProvider` factory and single null-guard helper remove four duplicated setups and all repeated `#if` blocks.
+- `EntityFactory` spawn errors now name the template and component involved.
+
 ## [v4.0.6.0] - 2022-09-25
 ### :recycle: Refactors
 - [`5829d41`](https://github.com/myarichuk/RoguelikeToolkit.Entities/commit/5829d410a51d148d1d4ae59c10ecfc3f453e97b1) - refactor ComponentFactory for code quality *(commit by [@myarichuk](https://github.com/myarichuk))*

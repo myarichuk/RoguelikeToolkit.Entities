@@ -12,10 +12,7 @@ namespace RoguelikeToolkit.Entities.Repository;
 /// </summary>
 internal class EntityTemplateLoader
 {
-    private static readonly TypeConversionProvider TypeConversionProvider = new(Options.Create(new TypeConversionProviderOptions
-    {
-        Options = ConversionOptions.UseDefaultFormatIfNotSpecified,
-    }));
+    private static readonly TypeConversionProvider TypeConversionProvider = Factory.TypeConversionProviderFactory.Create();
 
     private readonly IDeserializer _deserializer = new DeserializerBuilder()
         .IgnoreUnmatchedProperties()
@@ -299,7 +296,10 @@ internal class EntityTemplateLoader
                     ?? throw new FailedToParseException($"Referenced template '{referencedTemplateFilename}' loaded as null. This is not supposed to happen and is likely a bug.");
 
                 embeddedTemplate.Name = referencedTemplateFilename;
-                template.AddEmbeddedTemplate(embeddedTemplate);
+                if (!template.AddEmbeddedTemplate(embeddedTemplate))
+                {
+                    throw new FailedToParseException($"Duplicate embedded template name '{embeddedTemplate.Name}'. Embedded template names must be unique within a template.");
+                }
 
                 return;
             }
@@ -327,15 +327,31 @@ internal class EntityTemplateLoader
     private bool TryHandleEmbeddedTemplate(EntityTemplate template, string embeddedTemplateName, Dictionary<object, object> rawTemplateData, string? baseDirectory, HashSet<string> referenceChain, out string? failureReason)
     {
         failureReason = null;
+        Dictionary<string, object> convertedTemplateData;
+        try
+        {
+            convertedTemplateData = rawTemplateData.ToDictionary(
+                valuePair => TypeConversionProvider.ConvertToString(valuePair.Key), valuePair => valuePair.Value);
+        }
+        catch (ArgumentException e)
+        {
+            failureReason = $"Duplicate embedded property names after key conversion in embedded template '{embeddedTemplateName}'. Reason: {e.Message}";
+            return false;
+        }
+
         if (!TryLoadFrom(
-                rawTemplateData.ToDictionary(valuePair => TypeConversionProvider.ConvertToString(valuePair.Key), valuePair => valuePair.Value), baseDirectory, referenceChain, out var embeddedTemplate, out var loadFailureReason))
+                convertedTemplateData, baseDirectory, referenceChain, out var embeddedTemplate, out var loadFailureReason))
         {
             failureReason = loadFailureReason;
             return false;
         }
 
         embeddedTemplate.Name = embeddedTemplateName;
-        template.AddEmbeddedTemplate(embeddedTemplate);
+        if (!template.AddEmbeddedTemplate(embeddedTemplate))
+        {
+            failureReason = $"Duplicate embedded template name '{embeddedTemplateName}'. Embedded template names must be unique within a template.";
+            return false;
+        }
 
         return true;
     }

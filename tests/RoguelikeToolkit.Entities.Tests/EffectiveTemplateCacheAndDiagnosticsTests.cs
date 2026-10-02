@@ -115,6 +115,7 @@ public class EffectiveTemplateCacheTests
     }
 }
 
+[Collection("SequentialWarningHook")]
 public class DiagnosticsHookTests : IDisposable
 {
     private readonly List<string> _warnings = new();

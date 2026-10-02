@@ -27,43 +27,44 @@ internal class ComponentFactory
     // Scripts are intentionally NOT shared: script instances hold per-entity state.
     private static readonly ConcurrentDictionary<string, Dice> DiceParseCache = new();
 
+    // Dice/script conversions are stateless registrations over process-wide caches,
+    // so all factories share one provider built once instead of per factory.
+    private static readonly Lazy<TypeConversionProvider> SharedProvider = new(
+        () =>
+        {
+            var provider = TypeConversionProviderFactory.Create();
+            provider.RegisterConversion<string, Dice>(
+                (src, _, __) =>
+                    DiceParseCache.GetOrAdd(src, static s => Dice.Parse(s, true)),
+                ConversionQuality.Custom);
+
+            provider.RegisterConversion<string, EntityScript>(
+                (src, _, __) =>
+                    new EntityScript(src),
+                ConversionQuality.Custom);
+
+            provider.RegisterConversion<string, EntityComponentScript>(
+                (src, _, __) =>
+                    new EntityComponentScript(src),
+                ConversionQuality.Custom);
+
+            provider.RegisterConversion<string, EntityInteractionScript>(
+                (src, _, __) =>
+                    new EntityInteractionScript(src),
+                ConversionQuality.Custom);
+
+            provider.RegisterConversion<string, Script>(
+                (src, _, __) =>
+                    new Script(src),
+                ConversionQuality.Custom);
+
+            return provider;
+        },
+        LazyThreadSafetyMode.ExecutionAndPublication);
+
     private readonly ObjectMemberIterator _memberIterator = new();
 
-    private readonly TypeConversionProvider _typeConversionProvider = new(Options.Create(new TypeConversionProviderOptions
-    {
-        Options = UseDefaultFormatIfNotSpecified,
-    }));
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ComponentFactory"/> class
-    /// </summary>
-    public ComponentFactory()
-    {
-        _typeConversionProvider.RegisterConversion<string, Dice>(
-            (src, _, __) =>
-                DiceParseCache.GetOrAdd(src, static s => Dice.Parse(s, true)),
-            ConversionQuality.Custom);
-
-        _typeConversionProvider.RegisterConversion<string, EntityScript>(
-            (src, _, __) =>
-                new EntityScript(src),
-            ConversionQuality.Custom);
-
-        _typeConversionProvider.RegisterConversion<string, EntityComponentScript>(
-            (src, _, __) =>
-                new EntityComponentScript(src),
-            ConversionQuality.Custom);
-
-        _typeConversionProvider.RegisterConversion<string, EntityInteractionScript>(
-            (src, _, __) =>
-                new EntityInteractionScript(src),
-            ConversionQuality.Custom);
-
-        _typeConversionProvider.RegisterConversion<string, Script>(
-            (src, _, __) =>
-                new Script(src),
-            ConversionQuality.Custom);
-    }
+    private readonly TypeConversionProvider _typeConversionProvider = SharedProvider.Value;
 
     /// <summary>
     /// Try and create an instance of specified type from the data provided by the dictionary.
@@ -73,7 +74,8 @@ internal class ComponentFactory
     /// <param name="objectData">Property data, typically received from YamlDotNet deserialization</param>
     /// <param name="instance">resulting instance of the component</param>
     /// <returns>true if instance creation succeeded, false otherwise</returns>
-    /// <remarks>This overload is intended for value-type components</remarks>
+    /// <remarks>This overload is intended for value-type components.
+    /// Failures throw (invalid input, conversion errors) rather than returning false.</remarks>
     /// <exception cref="ArgumentNullException"><paramref name="objectData"/> is <see langword="null"/></exception>
     public bool TryCreateValueInstance(Type componentType, object objectData, out object? instance)
     {
@@ -102,7 +104,8 @@ internal class ComponentFactory
     /// <param name="objectData">Property data, typically received from YamlDotNet deserialization</param>
     /// <param name="instance">resulting instance of the component</param>
     /// <returns>true if instance creation succeeded, false otherwise</returns>
-    /// <remarks>This overload is intended for object components with properties</remarks>
+    /// <remarks>This overload is intended for object components with properties.
+    /// Failures throw (invalid input, conversion errors) rather than returning false.</remarks>
     public bool TryCreateReferenceInstance(Type componentType, IReadOnlyDictionary<object, object> objectData, out object? instance)
     {
         ValidateNonValueComponentInputThrowIfNeeded(componentType, objectData);
@@ -227,7 +230,12 @@ internal class ComponentFactory
         foreach (var kvp in objectData)
         {
             // Throws InvalidOperationException on non-string keys, same as the old per-member scan did.
-            index.TryAdd(GetPropertyKeyOrThrow(kvp.Key, componentType, "<template data>"), kvp);
+            var propertyKey = GetPropertyKeyOrThrow(kvp.Key, componentType, "<template data>");
+            if (!index.TryAdd(propertyKey, kvp))
+            {
+                EntityDiagnostics.Warn(
+                    $"Component '{componentType.FullName}' has a duplicate template property '{propertyKey}' (keys differ only by case); the later value was ignored. Check whether the template schema is correct.");
+            }
         }
 
         return index;
@@ -240,26 +248,12 @@ internal class ComponentFactory
             throw new ArgumentException($"The type doesn't implement IValueComponent<T>", nameof(componentType));
         }
 
-#if NET5_0_OR_GREATER
-        ArgumentNullException.ThrowIfNull(objectData);
-#else
-        if (objectData == null)
-        {
-            throw new ArgumentNullException(nameof(objectData));
-        }
-#endif
+        ArgumentGuard.ThrowIfNull(objectData, nameof(objectData));
     }
 
     private static void ValidateNonValueComponentInputThrowIfNeeded(Type componentType, IReadOnlyDictionary<object, object> objectData)
     {
-#if NET5_0_OR_GREATER
-        ArgumentNullException.ThrowIfNull(objectData);
-#else
-        if (objectData == null)
-        {
-            throw new ArgumentNullException(nameof(objectData));
-        }
-#endif
+        ArgumentGuard.ThrowIfNull(objectData, nameof(objectData));
 
         if (componentType.IsValueComponentType())
         {

@@ -181,3 +181,17 @@ dotnet test Library.sln
 Benchmarks (BenchmarkDotNet, allocation + time) catch perf/allocation regressions;
 the test suite includes stress tests (mass spawn, mass load, concurrent reads).
 See [benchmarks/README.md](benchmarks/README.md).
+
+Baseline (Apple M2, macOS Tahoe 26.3.1, .NET 10.0.12, BenchmarkDotNet 0.15.8;
+spawn rows are per 100-entity batch, resolve rows per single cold resolve + 1 spawn):
+
+| Benchmark | Mean | Allocated |
+|---|---|---|
+| `Load_200_Templates` | 11.54 ms | 5.02 MB |
+| `BulkLoad_Then_QueryByTag` | 10.10 ms | 4.76 MB |
+| `FolderLoad_200_Files` | 9.56 ms | 6.63 MB |
+| `Resolve_Cold_SingleLevel` | 2.22 ms | 20.28 KB |
+| `Resolve_Cold_TwoLevel` | 3.32 ms | 27.70 KB |
+| `Spawn_Simple` | 6.84 ms | 1.30 MB |
+| `Spawn_WithEmbedded` | 5.40 ms | 1.20 MB |
+| `Spawn_ManyComponents` | 13.00 ms | 2.12 MB |

@@ -49,6 +49,7 @@ namespace RoguelikeToolkit.Entities.Extensions
         /// <param name="dictToMerge">The dictionary to merge from.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static void MergeWith<TKey, TValue>(this IDictionary<TKey, TValue> dict, IDictionary<TKey, TValue> dictToMerge)
+            where TKey : notnull
         {
             foreach (var kvp in dictToMerge)
             {
@@ -65,6 +66,7 @@ namespace RoguelikeToolkit.Entities.Extensions
         /// <param name="dictToMerge">The dictionary to merge from.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static void MergeWith<TKey, TValue>(this IDictionary<TKey, TValue> dict, IReadOnlyDictionary<TKey, TValue> dictToMerge)
+            where TKey : notnull
         {
             foreach (var kvp in dictToMerge)
             {
@@ -84,6 +86,7 @@ namespace RoguelikeToolkit.Entities.Extensions
         /// <exception cref="ArgumentException">An element with the same key already exists in the <see cref="IDictionary{TKey,TValue}" />.</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static void AddIfNotExists<TKey, TValue>(this IDictionary<TKey, TValue> dict, TKey key, TValue val)
+            where TKey : notnull
         {
             // Fast path: Dictionary.TryAdd hashes once instead of ContainsKey+Add hashing twice.
             if (dict is Dictionary<TKey, TValue> concrete)

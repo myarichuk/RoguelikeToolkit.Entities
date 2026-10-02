@@ -3,7 +3,9 @@ using Microsoft.Extensions.ObjectPool;
 namespace RoguelikeToolkit.Entities.Factory
 {
     /// <summary>
-    /// <see cref="EmbeddedTemplateGraphIterator"/> is a helper object used to traverse the <see cref="EntityTemplate"/> graph
+    /// <see cref="EmbeddedTemplateGraphIterator"/> is a helper object used to traverse the <see cref="EntityTemplate"/> graph.
+    /// Spawning deliberately does not use it: creation carries a per-path chain for cycle
+    /// detection, which a shared BFS/DFS walk cannot provide.
     /// </summary>
     /// <remarks>
     /// This object assumes it runs in a single thread (a <see langword="readonly"/> struct over a mutable
