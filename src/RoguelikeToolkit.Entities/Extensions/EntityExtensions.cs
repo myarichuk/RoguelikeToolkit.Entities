@@ -13,8 +13,9 @@ namespace RoguelikeToolkit.Entities.Extensions
     // ReSharper disable once UnusedMember.Global
     public static class EntityExtension
     {
-        private static readonly HashSet<string> EmptyMetadata = new();
+        private static readonly ISet<string> EmptyMetadata = default(EmptyTagSet);
         private static readonly HashSet<World> Worlds = new();
+        private static readonly object WorldsLock = new();
 
         /// <summary>
         /// Fetch the tag collection attached to the <paramref name="entity"/>.
@@ -125,10 +126,19 @@ namespace RoguelikeToolkit.Entities.Extensions
         /// <exception cref="Exception"><see cref="Entity" /> was not created from a <see cref="World" /> instance in use. This is not supposed to happen and is likely an issue. </exception>
         public static void SetAsParentOf(this ref Entity parent, in Entity child)
         {
-            if (Worlds.Add(parent.World))
+            lock (WorldsLock)
             {
-                parent.World.SubscribeEntityDisposed(OnEntityDisposed);
-                parent.World.SubscribeWorldDisposed(w => Worlds.Remove(w));
+                if (Worlds.Add(parent.World))
+                {
+                    parent.World.SubscribeEntityDisposed(OnEntityDisposed);
+                    parent.World.SubscribeWorldDisposed(w =>
+                    {
+                        lock (WorldsLock)
+                        {
+                            Worlds.Remove(w);
+                        }
+                    });
+                }
             }
 
             HashSet<Entity> children;
@@ -177,6 +187,55 @@ namespace RoguelikeToolkit.Entities.Extensions
             {
                 child.Dispose();
             }
+        }
+
+        /// <summary>
+        /// Shared empty tag set returned for entities without a <see cref="Components.TagsComponent"/>.
+        /// Mutation attempts throw instead of corrupting every future tagless read.
+        /// </summary>
+        private readonly struct EmptyTagSet : ISet<string>
+        {
+            public int Count => 0;
+
+            public bool IsReadOnly => true;
+
+            public bool Add(string item) => throw new NotSupportedException("The shared empty tag set is read-only.");
+
+            public void Clear() => throw new NotSupportedException("The shared empty tag set is read-only.");
+
+            public bool Contains(string item) => false;
+
+            public void CopyTo(string[] array, int arrayIndex)
+            {
+            }
+
+            public void ExceptWith(IEnumerable<string> other) => throw new NotSupportedException("The shared empty tag set is read-only.");
+
+            public IEnumerator<string> GetEnumerator() => Enumerable.Empty<string>().GetEnumerator();
+
+            public void IntersectWith(IEnumerable<string> other) => throw new NotSupportedException("The shared empty tag set is read-only.");
+
+            public bool IsProperSubsetOf(IEnumerable<string> other) => other.Any();
+
+            public bool IsProperSupersetOf(IEnumerable<string> other) => false;
+
+            public bool IsSubsetOf(IEnumerable<string> other) => true;
+
+            public bool IsSupersetOf(IEnumerable<string> other) => !other.Any();
+
+            public bool Overlaps(IEnumerable<string> other) => false;
+
+            public bool Remove(string item) => false;
+
+            public bool SetEquals(IEnumerable<string> other) => !other.Any();
+
+            public void SymmetricExceptWith(IEnumerable<string> other) => throw new NotSupportedException("The shared empty tag set is read-only.");
+
+            public void UnionWith(IEnumerable<string> other) => throw new NotSupportedException("The shared empty tag set is read-only.");
+
+            void ICollection<string>.Add(string item) => throw new NotSupportedException("The shared empty tag set is read-only.");
+
+            System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         /// <summary>
@@ -232,6 +291,11 @@ namespace RoguelikeToolkit.Entities.Extensions
                     throw new ArgumentNullException(nameof(shouldTraverse));
                 }
 
+                // Pooled containers may carry state from a previous traversal; start clean
+                // so stale entries can neither skip live entities nor leak references.
+                _visited.Clear();
+                _traversalQueue.Clear();
+
                 _visited.Add(_root);
                 _traversalQueue.Enqueue(_root);
 
@@ -244,6 +308,9 @@ namespace RoguelikeToolkit.Entities.Extensions
 
             public void Dispose()
             {
+                // Clear before returning so the next borrower never sees our entities.
+                _visited.Clear();
+                _traversalQueue.Clear();
                 VisitedPool.Return(_visited);
                 TraverseQueuePool.Return(_traversalQueue);
             }

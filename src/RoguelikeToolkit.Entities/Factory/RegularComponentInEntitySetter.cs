@@ -19,10 +19,7 @@ namespace RoguelikeToolkit.Entities.Factory
             typeof(Entity).Methods(nameof(Entity.Set))
                 .FirstOrDefault(m => m.Parameters().Count == 1);
 
-        private readonly TypeConversionProvider _typeConversionProvider = new(Options.Create(new TypeConversionProviderOptions
-        {
-            Options = ConversionOptions.UseDefaultFormatIfNotSpecified,
-        }));
+        private readonly TypeConversionProvider _typeConversionProvider = TypeConversionProviderFactory.SharedBase;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="RegularComponentInEntitySetter"/> class

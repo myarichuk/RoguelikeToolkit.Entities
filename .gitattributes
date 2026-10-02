@@ -1,0 +1,4 @@
+# Normalize line endings across Windows/macOS/Linux checkouts (template
+# fixtures and sources stay LF; line-ending churn breaks nothing, but keep it clean).
+* text=auto
+*.snk binary

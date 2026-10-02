@@ -5,6 +5,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- RoguelikeToolkit.Dice and RoguelikeToolkit.Scripts ship unsigned (PublicKeyToken=null)
+         and are outside our control, so referencing them from this signed assembly always
+         raises CS8002. Suppressed deliberately to keep our strong-named identity; revisit if upstream signs. -->
+    <NoWarn>$(NoWarn);CS8002</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -26,7 +30,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.201" />
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.401" />
   </ItemGroup>
 
   <ItemGroup>

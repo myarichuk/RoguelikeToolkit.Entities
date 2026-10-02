@@ -21,12 +21,24 @@ namespace RoguelikeToolkit.Entities
                                                .Where(propertyName => propertyName != nameof(EmbeddedTemplates)),
                 StringComparer.InvariantCultureIgnoreCase);
 
+        private string? _name;
+
+        private string? _description;
+
         private readonly Dictionary<string, object> _components = new(StringComparer.InvariantCultureIgnoreCase);
 
         private HashSet<string> _inherits = new(StringComparer.InvariantCultureIgnoreCase);
         private readonly HashSet<string> _tags = new(StringComparer.InvariantCultureIgnoreCase);
 
         private readonly HashSet<EntityTemplate> _embeddedTemplates = new(EqualityComparer);
+
+        // Set when the library retains this instance (template repository store or
+        // effective-template cache). The instance is then shared: reads are cheap and safe,
+        // while mutation warns through EntityDiagnostics (silent by default) so variant
+        // workflows use Copy() instead of accidentally editing shared state.
+        // Note: this field participates in synthesized record equality; all production
+        // comparisons use reference or name equality and are unaffected.
+        private bool _isShared;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="EntityTemplate"/> class.
@@ -57,7 +69,7 @@ namespace RoguelikeToolkit.Entities
             _components = new Dictionary<string, object>(other.Components, StringComparer.InvariantCultureIgnoreCase);
             _inherits = new HashSet<string>(other.Inherits, StringComparer.InvariantCultureIgnoreCase);
             _tags = new HashSet<string>(other.Tags, StringComparer.InvariantCultureIgnoreCase);
-            _embeddedTemplates = new HashSet<EntityTemplate>(other.EmbeddedTemplates);
+            _embeddedTemplates = new HashSet<EntityTemplate>(other.EmbeddedTemplates, EqualityComparer);
         }
 
         /// <summary>
@@ -68,12 +80,28 @@ namespace RoguelikeToolkit.Entities
         /// <summary>
         /// Gets or sets the name of the entity template. Effectively, this is an entity Id and it should be unique
         /// </summary>
-        public string? Name { get; set; }
+        public string? Name
+        {
+            get => _name;
+            set
+            {
+                NotifySharedMutation();
+                _name = value;
+            }
+        }
 
         /// <summary>
         /// Gets or sets the description of the entity template. This is an "echo" field, it is used for UI and such
         /// </summary>
-        public string? Description { get; set; }
+        public string? Description
+        {
+            get => _description;
+            set
+            {
+                NotifySharedMutation();
+                _description = value;
+            }
+        }
 
         /// <summary>
         /// Gets the collection of entity components.
@@ -90,7 +118,11 @@ namespace RoguelikeToolkit.Entities
 #endif
         {
             get => _inherits;
-            set => _inherits = new(value);
+            set
+            {
+                NotifySharedMutation();
+                _inherits = new(value, StringComparer.InvariantCultureIgnoreCase);
+            }
         }
 
         /// <summary>
@@ -113,11 +145,29 @@ namespace RoguelikeToolkit.Entities
 #endif
 
         /// <summary>
+        /// Gets a value indicating whether this instance is retained by the library
+        /// (template repository or effective-template cache) and therefore shared.
+        /// Mutating a shared instance warns through <see cref="EntityDiagnostics"/>
+        /// (silent by default); use <see cref="Copy"/> to create an editable variant.
+        /// </summary>
+        internal bool IsShared => _isShared;
+
+        /// <summary>
+        /// Creates an editable, unshared copy of this template. Use this to derive
+        /// variants ("different mobs") from repository or cached templates: the copy
+        /// carries all data but no shared marker, so mutating it never warns and never
+        /// affects the source. (Named Copy because records reserve Clone.)
+        /// </summary>
+        /// <returns>an editable copy of this template.</returns>
+        public EntityTemplate Copy() => new EntityTemplate(this);
+
+        /// <summary>
         /// Merge this template data with other template. Does not override existing values
         /// </summary>
         /// <param name="other">entity template to copy values from</param>
         public void MergeWith(EntityTemplate other)
         {
+            NotifySharedMutation();
             MergeComponents(other.Components);
             MergeInherits(other.Inherits);
             MergeTags(other.Tags);
@@ -125,12 +175,21 @@ namespace RoguelikeToolkit.Entities
         }
 
         /// <summary>
+        /// Marks this instance as retained by the library (shared). Called by the
+        /// repository on store and by the inheritance resolver on cache insert.
+        /// </summary>
+        internal void MarkShared() => _isShared = true;
+
+        /// <summary>
         /// Merge this template components data with other template. Does not override existing values
         /// </summary>
         /// <param name="otherComponents">components data to copy values from</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void MergeComponents(IReadOnlyDictionary<string, object> otherComponents) =>
+        internal void MergeComponents(IReadOnlyDictionary<string, object> otherComponents)
+        {
+            NotifySharedMutation();
             _components.MergeWith(otherComponents);
+        }
 
         /// <summary>
         /// Merge this template inheritance data with other template. Does not override existing values
@@ -138,11 +197,14 @@ namespace RoguelikeToolkit.Entities
         /// <param name="otherInherits">inheritance data to copy values from</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
 #if NET5_0_OR_GREATER
-        internal void MergeInherits(IReadOnlySet<string> otherInherits) =>
+        internal void MergeInherits(IReadOnlySet<string> otherInherits)
 #else
-        internal void MergeInherits(ISet<string> otherInherits) =>
+        internal void MergeInherits(ISet<string> otherInherits)
 #endif
+        {
+            NotifySharedMutation();
             _inherits.UnionWith(otherInherits);
+        }
 
         /// <summary>
         /// Merge this template tags data with other template. Does not override existing values
@@ -150,11 +212,14 @@ namespace RoguelikeToolkit.Entities
         /// <param name="otherTags">tags data to copy values from</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
 #if NET5_0_OR_GREATER
-        internal void MergeTags(IReadOnlySet<string> otherTags) =>
+        internal void MergeTags(IReadOnlySet<string> otherTags)
 #else
-        internal void MergeTags(ISet<string> otherTags) =>
+        internal void MergeTags(ISet<string> otherTags)
 #endif
+        {
+            NotifySharedMutation();
             _tags.UnionWith(otherTags);
+        }
 
         /// <summary>
         /// Merge this template embedded template data with other template. Does not override existing values
@@ -162,27 +227,36 @@ namespace RoguelikeToolkit.Entities
         /// <param name="otherEmbeddedTemplates">embedded template data to copy values from</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
 #if NET5_0_OR_GREATER
-        internal void MergeEmbeddedTemplates(IReadOnlySet<EntityTemplate> otherEmbeddedTemplates) =>
+        internal void MergeEmbeddedTemplates(IReadOnlySet<EntityTemplate> otherEmbeddedTemplates)
 #else
-        internal void MergeEmbeddedTemplates(ISet<EntityTemplate> otherEmbeddedTemplates) =>
+        internal void MergeEmbeddedTemplates(ISet<EntityTemplate> otherEmbeddedTemplates)
 #endif
+        {
+            NotifySharedMutation();
             _embeddedTemplates.UnionWith(otherEmbeddedTemplates);
+        }
 
         /// <summary>
         /// Add a single tag to this template. Used by the loader to populate the template without intermediate copies.
         /// </summary>
         /// <param name="tag">tag to add.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void AddTag(string tag) =>
+        internal void AddTag(string tag)
+        {
+            NotifySharedMutation();
             _tags.Add(tag);
+        }
 
         /// <summary>
         /// Add a single inheritance entry to this template. Used by the loader to populate the template without intermediate copies.
         /// </summary>
         /// <param name="inheritedTemplateName">name of the inherited template to add.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void AddInherit(string inheritedTemplateName) =>
+        internal void AddInherit(string inheritedTemplateName)
+        {
+            NotifySharedMutation();
             _inherits.Add(inheritedTemplateName);
+        }
 
         /// <summary>
         /// Add a single component to this template. Does not override an existing entry with the same name.
@@ -193,6 +267,7 @@ namespace RoguelikeToolkit.Entities
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal bool AddComponent(string componentName, object componentData)
         {
+            NotifySharedMutation();
 #if NET5_0_OR_GREATER
             return _components.TryAdd(componentName, componentData);
 #else
@@ -210,9 +285,27 @@ namespace RoguelikeToolkit.Entities
         /// Add a single embedded template to this template. Used by the loader to populate the template without intermediate copies.
         /// </summary>
         /// <param name="embeddedTemplate">embedded template to add.</param>
+        /// <returns>true if the embedded template was added, false if an embedded template with the same name already exists.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void AddEmbeddedTemplate(EntityTemplate embeddedTemplate) =>
-            _embeddedTemplates.Add(embeddedTemplate);
+        internal bool AddEmbeddedTemplate(EntityTemplate embeddedTemplate)
+        {
+            NotifySharedMutation();
+            return _embeddedTemplates.Add(embeddedTemplate);
+        }
+
+        private void NotifySharedMutation([CallerMemberName] string? memberName = null)
+        {
+            if (!_isShared)
+            {
+                return;
+            }
+
+            EntityDiagnostics.Warn(
+                $"EntityTemplate '{Name ?? "<unnamed>"}' is shared (repository or effective-template cache) " +
+                $"and is being mutated via '{memberName}'. The change applies to the shared instance; " +
+                $"call Copy() first to derive an independent variant, and invalidate the effective-template " +
+                $"cache (EntityFactory.InvalidateEffectiveTemplateCache) after mutating a loaded template.");
+        }
 
         private sealed class NameEqualityComparer : IEqualityComparer<EntityTemplate>
         {
