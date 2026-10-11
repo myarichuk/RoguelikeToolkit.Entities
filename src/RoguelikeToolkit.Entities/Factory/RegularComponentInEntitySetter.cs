@@ -23,6 +23,6 @@ namespace RoguelikeToolkit.Entities.Factory
 
         /// <inheritdoc />
         internal override void SetComponent(in Entity entity, Type componentType, object componentInstance) =>
-            ComponentSetter.For(componentType).Set(entity, componentInstance);
+            ComponentAccessor.For(componentType).Set(entity, componentInstance);
     }
 }

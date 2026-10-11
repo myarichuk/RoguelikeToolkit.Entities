@@ -5,6 +5,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### :boom: Breaking Changes
+- The `RoguelikeToolkit.Scripts` dependency is replaced by `RoguelikeToolkit.Entities.Scripting` (Jint 4.16.2):
+  - namespace `RoguelikeToolkit.Scripts` -> `RoguelikeToolkit.Entities.Scripting`;
+  - script constructors take only the source (reference types moved to `ScriptHostOptions.ReferenceTypes`);
+  - every execution takes a `ScriptHost` (owns the engine; one per thread) as its first argument;
+  - extra arguments are `ScriptArgument` / `(string, object?)` tuples instead of `(string, dynamic)`;
+  - `EntityComponentScript.TryExecuteOn` takes the entity by `in` instead of `ref`;
+  - scripts are stateless and shared between entities spawned from the same template: top-level `var`s no longer
+    persist between executions (state belongs in components).
+
 ### :sparkles: Features
 - `EntityTemplate.Copy()` creates an editable, unshared variant of a template ("different mobs").
 - `EntityTemplateRepository.AddTemplate` stores a defensive copy (clone-on-write at the ownership boundary).
@@ -13,10 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Shared templates (repository store, effective-template cache) stay shared (flyweight) for reads; mutating one warns through `EntityDiagnostics` (silent by default) instead of corrupting state silently.
 - Unity IL2CPP / AOT support: no Reflection.Emit anywhere on the load/spawn path. `Fasterflect` and `ObjectTreeWalker` (Sigil IL emission) are no longer dependencies; component members are written through cached plain reflection, components are set through cached closed generic setters, and primitive/enum/dice/script conversions take an AOT-safe path before falling back to `deniszykov.TypeConversion`.
 - `AotComponentRegistry.Register<T>()`: optional per-component AOT hint (closed generic setter + trimming annotations) for runtimes that cannot instantiate generics at runtime (NativeAOT, IL2CPP before 2022.1).
-- NativeAOT smoke test (`tests/RoguelikeToolkit.Entities.AotSmoke`, CI job) as the IL2CPP proxy: load, inheritance, nested struct/class, value, dice and global components, mass spawn.
+- NativeAOT smoke test (`tests/RoguelikeToolkit.Entities.AotSmoke`, CI job) as the IL2CPP proxy: load, inheritance, nested struct/class, value, dice and global components, scripts, mass spawn.
+- `ScriptHost` / `ScriptHostOptions`: one reusable Jint engine with statement, recursion, timeout and (opt-in) memory limits; per-execution function scope and binding cleanup.
+- Scripts can use `entity.HasComponent/GetComponent/SetComponent/RemoveComponent(Type)` (exposed types via `ScriptHostOptions.ReferenceTypes`); never worked with the old package.
 
 ### :zap: Performance
 - Spawning is 6-40x faster with 5-8x less allocation (Spawn_Simple 11.5 ms -> 0.87 ms per 100 entities, 1.28 MB -> 163 KB; same machine, BenchmarkDotNet short job) from dropping per-type IL generation and `MethodInfo.Invoke` on the hot path.
+- Script members cost nothing per spawn (shared instance; previously a new Jint engine per entity: ~53 µs, ~21 KB). Executing with an argument: 15.8 µs -> 6.2 µs.
 
 ### :bug: Fixes
 - `EntityExtensions` child iterator no longer leaks pooled traversal state between calls; tagless entities share an immutable empty tag set; parent-link bookkeeping is thread-safe.

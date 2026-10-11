@@ -5,8 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <!-- RoguelikeToolkit.Dice and RoguelikeToolkit.Scripts ship unsigned (PublicKeyToken=null)
-         and are outside our control, so referencing them from this signed assembly always
+    <!-- RoguelikeToolkit.Dice ships unsigned (PublicKeyToken=null)
+         and is outside our control, so referencing it from this signed assembly always
          raises CS8002. Suppressed deliberately to keep our strong-named identity; revisit if upstream signs. -->
     <NoWarn>$(NoWarn);CS8002</NoWarn>
   </PropertyGroup>
@@ -24,7 +24,7 @@
     <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="10.0.5" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
     <PackageReference Include="RoguelikeToolkit.Dice" Version="1.0.4" />
-    <PackageReference Include="RoguelikeToolkit.Scripts" Version="0.3.0" />
+    <PackageReference Include="Jint" Version="4.16.2" />
   </ItemGroup>
 
   <ItemGroup>

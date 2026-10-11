@@ -10,7 +10,7 @@ It is using the awesome [DefaultEcs](https://github.com/Doraku/DefaultEcs) libra
 - **YAML and JSON support:** Entity templates can be written in human-readable `.yaml` or `.json` formats.
 - **Inheritance:** Templates can inherit from one or more base templates, mixing components and tags together.
 - **Embedded templates:** Hierarchies are fully supported, you can embed child entities inside templates.
-- **Scripts:** Components can include scripts, which allow data-driven behavior.
+- **Scripts:** Components can carry JavaScript (Jint) scripts for data-driven behavior; parsed once, shared, AOT-safe.
 - **Dice parsing:** The system seamlessly creates component variables from standard dice notations (`2d6+3`).
 
 ## Quick Start
@@ -118,7 +118,47 @@ for (var i = 0; i < 2000; i++)
 
 Global components are first-write-wins: the first spawned entity sets the world's
 shared copy, later spawns link to it. Dice strings (`"1d4"`) share one parse per
-distinct expression; scripts are constructed per entity and never shared.
+distinct expression; scripts likewise share one parsed, immutable instance per distinct source.
+
+### Scripts
+
+Script-typed component members (`EntityScript`, `EntityComponentScript`, `EntityInteractionScript`, `Script`, all in
+`RoguelikeToolkit.Entities.Scripting`) are populated from template strings:
+
+```yaml
+Components:
+  Behavior:
+    OnHit: |
+      var h = entity.GetComponent(Health);
+      h.Current -= damage;
+      entity.SetComponent(Health, h);
+    Regen: component.Current += amount;
+```
+
+```csharp
+[Component]
+public class Behavior
+{
+    public EntityScript? OnHit { get; set; }
+    public EntityComponentScript? Regen { get; set; }
+}
+
+// one host per thread / simulation loop; it owns the (single) Jint engine
+using var host = new ScriptHost(new ScriptHostOptions { ReferenceTypes = new[] { typeof(Health) } });
+
+var behavior = goblin.Get<Behavior>();
+behavior.OnHit!.ExecuteOn(host, ref goblin, ("damage", 4));
+behavior.Regen!.TryExecuteOn<Health>(host, goblin, ("amount", 2)); // writes the component back via Entity.Set
+```
+
+- Scripts are immutable and hold no state: each distinct source is parsed once per process and the instance is shared by
+  every entity spawned from the template. Keep state in components.
+- Each execution runs in its own function scope (`var`/`function` do not leak between scripts, `return` exits early);
+  bindings (`entity`, `component`, `source`/`target`, arguments) are cleared afterwards.
+- `entity.HasComponent/GetComponent/SetComponent/RemoveComponent(Type)` take any type exposed via
+  `ScriptHostOptions.ReferenceTypes`. Value-type components come back as copies: write them back with `SetComponent`.
+- Limits: 500 statements and recursion depth 1024 per execution by default; `Timeout` and `MemoryLimitBytes` are opt-in.
+- `ScriptHost` is not thread-safe (neither is a Jint engine); scripts are, and can run on any number of hosts.
 
 ### Catching Template Typos
 
@@ -181,8 +221,10 @@ CI publishes a NativeAOT smoke test (stricter than IL2CPP: no JIT, no runtime ge
     <assembly fullname="MyGame.Components" preserve="all" />
   </linker>
   ```
-- **Scripts:** `RoguelikeToolkit.Scripts` (`Script.ExecuteOn` with extra `(name, value)` parameters) dispatches through
-  `dynamic`, which IL2CPP cannot run. Template scripts without extra parameters are unaffected.
+- **Scripts:** Jint is a pure managed interpreter (no IL emission); arguments are marshalled without `dynamic`. Script
+  interop reaches your component types by reflection, so they need the same stripping protection as above. Leave
+  `ScriptHostOptions.MemoryLimitBytes` off on IL2CPP (it polls `GC.GetAllocatedBytesForCurrentThread` per statement).
+  Jint is pinned to the version `RoguelikeToolkit.World.Scripting.Jint` uses: a Unity project can only hold one.
 
 ## Docs
 

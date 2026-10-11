@@ -29,7 +29,7 @@ namespace RoguelikeToolkit.Entities.Factory
         /// <remarks>First write wins: the world's copy is set only when absent, then the entity is linked to it.</remarks>
         internal override void SetComponent(in Entity entity, Type componentType, object componentInstance)
         {
-            if (!ComponentSetter.For(componentType).SetGlobal(World, entity, componentInstance))
+            if (!ComponentAccessor.For(componentType).SetGlobal(World, entity, componentInstance))
             {
                 EntityDiagnostics.Warn(
                     $"Global component '{componentType.FullName}' is already set on the world; the value from this spawn was ignored (first write wins). " +

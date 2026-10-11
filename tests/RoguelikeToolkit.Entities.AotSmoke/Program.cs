@@ -4,6 +4,7 @@ using RoguelikeToolkit.Entities;
 using RoguelikeToolkit.Entities.Components;
 using RoguelikeToolkit.Entities.Factory;
 using RoguelikeToolkit.Entities.Repository;
+using RoguelikeToolkit.Entities.Scripting;
 
 // Statically known closed generics: what a stricter AOT runtime needs (optional on IL2CPP 2022.1+).
 AotComponentRegistry.Register<Health>();
@@ -12,6 +13,7 @@ AotComponentRegistry.Register<Inventory>();
 AotComponentRegistry.Register<Speed>();
 AotComponentRegistry.Register<Weapon>();
 AotComponentRegistry.Register<Rules>();
+AotComponentRegistry.Register<Behavior>();
 
 var dir = Path.Combine(Path.GetTempPath(), "rltk-aot-smoke-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(dir);
@@ -30,6 +32,13 @@ Components:
   Stats: { Strength: 3, Nested: { Luck: 7, Label: lucky } }
   Inventory: { Gold: 12, Bag: { Slots: 4 } }
   Weapon: { Damage: 1d4+1 }
+  Behavior:
+    OnHit: |
+      var h = entity.GetComponent(Health);
+      h.Current = h.Max - damage;
+      entity.SetComponent(Health, h);
+      entity.GetComponent(Inventory).Gold += 1;
+    Regen: component.Current += amount;
 """);
 
 var warnings = new List<string>();
@@ -61,6 +70,16 @@ Check(goblin.Get<Rules>().Difficulty == "hard" && world.Get<Rules>().Difficulty 
 for (var i = 0; i < 1000; i++)
 {
     Check(factory.TryCreate("Goblin", out _), "mass spawn");
+}
+
+// scripting: Jint interpreter, reflection-only interop (no Reflection.Emit, no dynamic)
+using (var host = new ScriptHost(new ScriptHostOptions { ReferenceTypes = new[] { typeof(Health), typeof(Inventory) } }))
+{
+    var behavior = goblin.Get<Behavior>();
+    behavior.OnHit!.ExecuteOn(host, ref goblin, ("damage", 4));
+    Check(goblin.Get<Health>().Current == 11 && goblin.Get<Inventory>().Gold == 13, "entity script + component interop");
+    Check(behavior.Regen!.TryExecuteOn<Health>(host, goblin, ("amount", 2)) && goblin.Get<Health>().Current == 13, "component script on struct");
+    Check(factory.TryCreate("Goblin", out var other) && ReferenceEquals(other.Get<Behavior>().OnHit, behavior.OnHit), "template scripts shared");
 }
 
 Check(repository.GetByTags("AI", "CanMove").Count() >= 1, "tag query");
@@ -125,6 +144,14 @@ public class Bag
 public class Weapon
 {
     public Dice? Damage { get; set; }
+}
+
+[Component]
+public class Behavior
+{
+    public EntityScript? OnHit { get; set; }
+
+    public EntityComponentScript? Regen { get; set; }
 }
 
 [Component(IsGlobal = true)]
