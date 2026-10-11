@@ -24,8 +24,8 @@ if (factory.TryCreate("goblin", out var entity)) { /* ... */ }
 
 Inheritance is resolved once per template and cached (shared read-only result); children spawn by
 recursing into direct children and are linked with `SetAsParentOf`. Components are built per spawn:
-dice strings share one parse per distinct expression, scripts are constructed per entity (they hold
-per-entity state and are never shared). Global components are first-write-wins: the first spawned
+dice strings and scripts share one parsed, immutable instance per distinct source (scripts hold no
+execution state; the `ScriptHost` passed at execution does). Global components are first-write-wins: the first spawned
 entity sets the world's copy, later spawns link to it.
 
 Template typos surface through `EntityDiagnostics.WarningHandler`: a template property that matches

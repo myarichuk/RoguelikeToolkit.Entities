@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Reflection;
-using Fasterflect;
 using RoguelikeToolkit.Entities.Exceptions;
 using RoguelikeToolkit.Entities.Extensions;
 
@@ -44,10 +43,10 @@ namespace RoguelikeToolkit.Entities.Factory
             try
             {
                 var executingAssembly = Assembly.GetExecutingAssembly();
-                var referenced = executingAssembly.GetReferencedAssemblies();
 
                 // make sure to load all referenced assemblies into the domain so we don't miss any assemblies
-                foreach (var asm in referenced)
+                // (AOT runtimes have every assembly loaded up front and may not expose references at all)
+                foreach (var asm in GetReferencedAssembliesOrNull(executingAssembly) ?? Array.Empty<AssemblyName>())
                 {
                     Assembly.Load(asm);
                 }
@@ -65,14 +64,13 @@ namespace RoguelikeToolkit.Entities.Factory
 
                     foreach (var type in GetLoadableTypes(assembly))
                     {
-                        if (!type.HasAttribute<ComponentAttribute>() && !type.IsValueComponentType())
+                        var componentAttribute = type.GetComponentAttribute();
+                        if (componentAttribute == null && !type.IsValueComponentType())
                         {
                             continue;
                         }
 
-                        var componentTypeName = type.HasAttribute<ComponentAttribute>()
-                            ? type.Attribute<ComponentAttribute>().Name ?? type.Name
-                            : type.Name;
+                        var componentTypeName = componentAttribute?.Name ?? type.Name;
 
                         if (typeRegistry.ContainsKey(componentTypeName))
                         {
@@ -123,11 +121,27 @@ namespace RoguelikeToolkit.Entities.Factory
 
             try
             {
-                return assembly.GetReferencedAssemblies().Any(reference => reference.FullName == entitiesAssemblyFullName);
+                var references = GetReferencedAssembliesOrNull(assembly);
+
+                // unknown references (AOT): scan the assembly rather than miss its component types
+                return references == null || references.Any(reference => reference.FullName == entitiesAssemblyFullName);
             }
             catch (Exception e) when (e is FileNotFoundException or FileLoadException or BadImageFormatException)
             {
                 return false;
+            }
+        }
+
+        // Assembly references are metadata a JIT runtime always has; NativeAOT throws PlatformNotSupportedException.
+        private static AssemblyName[]? GetReferencedAssembliesOrNull(Assembly assembly)
+        {
+            try
+            {
+                return assembly.GetReferencedAssemblies();
+            }
+            catch (PlatformNotSupportedException)
+            {
+                return null;
             }
         }
 

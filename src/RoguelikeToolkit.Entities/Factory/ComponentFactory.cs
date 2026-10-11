@@ -1,13 +1,11 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using deniszykov.TypeConversion;
-using Fasterflect;
 using Microsoft.Extensions.Options;
-using ObjectTreeWalker;
 using RoguelikeToolkit.DiceExpression;
 using RoguelikeToolkit.Entities.Components;
 using RoguelikeToolkit.Entities.Extensions;
-using RoguelikeToolkit.Scripts;
+using RoguelikeToolkit.Entities.Scripting;
 using static deniszykov.TypeConversion.ConversionOptions;
 
 namespace RoguelikeToolkit.Entities.Factory;
@@ -23,9 +21,21 @@ internal class ComponentFactory
     // IValueComponent{T} payload types are per-type constants; calling GetInterfaces() per instance was pure overhead.
     private static readonly ConcurrentDictionary<Type, Type> ValueComponentPayloadCache = new();
 
-    // Dice expressions are immutable once parsed, so identical strings share a single parse.
-    // Scripts are intentionally NOT shared: script instances hold per-entity state.
+    // Dice expressions and scripts are immutable once parsed, so identical strings share one instance per target type.
     private static readonly ConcurrentDictionary<string, Dice> DiceParseCache = new();
+    private static readonly ConcurrentDictionary<(Type Type, string Source), object> ScriptCache = new();
+
+    // String-parsed component member types. Consulted by the AOT-safe fast path first; the same parsers are also
+    // registered on the general provider below so its behavior is unchanged for anything that falls through.
+    private static readonly IReadOnlyDictionary<Type, Func<string, object>> StringConverters =
+        new Dictionary<Type, Func<string, object>>
+        {
+            [typeof(Dice)] = static src => DiceParseCache.GetOrAdd(src, static s => Dice.Parse(s, true)),
+            [typeof(EntityScript)] = static src => SharedScript(src, static s => new EntityScript(s)),
+            [typeof(EntityComponentScript)] = static src => SharedScript(src, static s => new EntityComponentScript(s)),
+            [typeof(EntityInteractionScript)] = static src => SharedScript(src, static s => new EntityInteractionScript(s)),
+            [typeof(Script)] = static src => SharedScript(src, static s => new Script(s)),
+        };
 
     // Dice/script conversions are stateless registrations over process-wide caches,
     // so all factories share one provider built once instead of per factory.
@@ -39,30 +49,24 @@ internal class ComponentFactory
                 ConversionQuality.Custom);
 
             provider.RegisterConversion<string, EntityScript>(
-                (src, _, __) =>
-                    new EntityScript(src),
+                (src, _, __) => (EntityScript)StringConverters[typeof(EntityScript)](src),
                 ConversionQuality.Custom);
 
             provider.RegisterConversion<string, EntityComponentScript>(
-                (src, _, __) =>
-                    new EntityComponentScript(src),
+                (src, _, __) => (EntityComponentScript)StringConverters[typeof(EntityComponentScript)](src),
                 ConversionQuality.Custom);
 
             provider.RegisterConversion<string, EntityInteractionScript>(
-                (src, _, __) =>
-                    new EntityInteractionScript(src),
+                (src, _, __) => (EntityInteractionScript)StringConverters[typeof(EntityInteractionScript)](src),
                 ConversionQuality.Custom);
 
             provider.RegisterConversion<string, Script>(
-                (src, _, __) =>
-                    new Script(src),
+                (src, _, __) => (Script)StringConverters[typeof(Script)](src),
                 ConversionQuality.Custom);
 
             return provider;
         },
         LazyThreadSafetyMode.ExecutionAndPublication);
-
-    private readonly ObjectMemberIterator _memberIterator = new();
 
     private readonly TypeConversionProvider _typeConversionProvider = SharedProvider.Value;
 
@@ -81,18 +85,20 @@ internal class ComponentFactory
     {
         ValidateValueComponentInputThrowIfNeeded(componentType, objectData);
 
-        instance = default;
         var instanceAsObject = CreateEmptyInstance(componentType);
 
-        // ReSharper disable once ExceptionNotDocumented
-        instanceAsObject.SetPropertyValue(
-            nameof(IValueComponent<object>.Value),
-            _typeConversionProvider.Convert(
-                objectData.GetType(),
-                GetValueComponentPayloadType(componentType),
-                objectData));
+        if (!ComponentMembers.For(componentType).TryGet(nameof(IValueComponent<object>.Value), out var valueMember))
+        {
+            throw new InvalidOperationException(
+                $"Value component '{componentType.FullName}' has no settable '{nameof(IValueComponent<object>.Value)}' property.");
+        }
 
-        instance = instanceAsObject.UnwrapIfWrapped();
+        // ReSharper disable once ExceptionNotDocumented
+        valueMember.SetValue(
+            instanceAsObject,
+            ConvertScalar(objectData, GetValueComponentPayloadType(componentType)));
+
+        instance = instanceAsObject;
         return true;
     }
 
@@ -109,95 +115,42 @@ internal class ComponentFactory
     public bool TryCreateReferenceInstance(Type componentType, IReadOnlyDictionary<object, object> objectData, out object? instance)
     {
         ValidateNonValueComponentInputThrowIfNeeded(componentType, objectData);
-        instance = default;
         var instanceAsObject = CreateEmptyInstance(componentType);
+        var members = ComponentMembers.For(componentType);
 
-        // Index once: every member lookup below is O(1) instead of an O(P) scan.
-        var topIndex = BuildKeyIndex(objectData, componentType);
-        var consumedTopKeys = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);
-
-        _memberIterator.Traverse(
-            instanceAsObject,
-            (in MemberAccessor accessor) =>
-            {
-                var memberName = accessor.Name;
-
-                // Materialize once: the old code enumerated the path repeatedly (Any/Foreach/Last-in-loop).
-                var propertyPath = accessor.PropertyPath.Select(x => x.Name).ToArray();
-                var relevantPair = GetRelevantPair(propertyPath, memberName, topIndex, consumedTopKeys);
-
-                if (relevantPair.Value != null)
-                {
-                    var convertedValue = ConvertValueFromSrcToDestType(
-                        relevantPair.Value,
-                        accessor.Type);
-                    if (convertedValue != null)
-                    {
-                        accessor.SetValue(convertedValue);
-                    }
-                    else
-                    {
-                        EntityDiagnostics.Warn(
-                            $"Component '{componentType.FullName}' member '{memberName}' resolved a value that converted to null; the value was skipped. Check whether the template schema is correct.");
-                    }
-                }
-            },
-            (in MemberAccessor accessor) => accessor.MemberType == MemberType.Property);
-
-        // Anything left over matches no member (typo, removed property, field instead of property):
-        // previously silently ignored, now reported through the diagnostics hook.
-        foreach (var key in topIndex.Keys)
+        // Index once (case-insensitive, duplicates reported), then one O(1) member lookup per template key.
+        // Nested mappings recurse through ConvertValueFromSrcToDestType, so each level validates its own keys.
+        foreach (var kvp in BuildKeyIndex(objectData, componentType))
         {
-            if (!consumedTopKeys.Contains(key))
+            if (!members.TryGet(kvp.Key, out var member))
+            {
+                // typo, removed property, or a field instead of a property
+                EntityDiagnostics.Warn(
+                    $"Component '{componentType.FullName}' has no member for template property '{kvp.Key}'; the value was ignored. Check whether the template schema is correct.");
+                continue;
+            }
+
+            if (kvp.Value.Value == null)
+            {
+                // explicit empty value in the template: leave the member at its default (unchanged behavior)
+                continue;
+            }
+
+            var convertedValue = ConvertValueFromSrcToDestType(kvp.Value.Value, member.Type);
+            if (convertedValue != null)
+            {
+                member.SetValue(instanceAsObject, convertedValue);
+            }
+            else
             {
                 EntityDiagnostics.Warn(
-                    $"Component '{componentType.FullName}' has no member for template property '{key}'; the value was ignored. Check whether the template schema is correct.");
+                    $"Component '{componentType.FullName}' member '{kvp.Key}' resolved a value that converted to null; the value was skipped. Check whether the template schema is correct.");
             }
         }
 
-        instance = instanceAsObject.UnwrapIfWrapped();
+        // value types: the box was mutated in place, so returning it hands back the populated copy
+        instance = instanceAsObject;
         return true;
-
-        KeyValuePair<object, object> GetRelevantPair(
-            string[] propertyPath,
-            string memberName,
-            Dictionary<string, KeyValuePair<object, object>> rootIndex,
-            HashSet<string> consumedKeys)
-        {
-            if (propertyPath.Length == 0)
-            {
-                if (rootIndex.TryGetValue(memberName, out var pair))
-                {
-                    consumedKeys.Add(memberName);
-                    return pair;
-                }
-
-                return default;
-            }
-
-            if (!rootIndex.TryGetValue(propertyPath[0], out var topPair))
-            {
-                return default;
-            }
-
-            consumedKeys.Add(propertyPath[0]);
-
-            var currentPair = topPair;
-            for (var i = 1; i < propertyPath.Length; i++)
-            {
-                if (currentPair.Value is not IReadOnlyDictionary<object, object> currentData)
-                {
-                    return currentPair;
-                }
-
-                if (!BuildKeyIndex(currentData, componentType).TryGetValue(propertyPath[i], out currentPair))
-                {
-                    return default;
-                }
-            }
-
-            return currentPair;
-        }
     }
 
     /// <summary>
@@ -218,9 +171,7 @@ internal class ComponentFactory
     private static Type GetValueComponentPayloadType(Type componentType) =>
         ValueComponentPayloadCache.GetOrAdd(
             componentType,
-            static type => type.GetInterfaces()
-                .FirstOrDefault(i => i.FullName?.Contains(nameof(IValueComponent<object>)) ?? false)
-                ?.GenericTypeArguments[0]
+            static type => type.GetValueComponentInterface()?.GenericTypeArguments[0]
             ?? throw new InvalidOperationException("This is not supposed to happen and is likely a bug."));
 
     private static Dictionary<string, KeyValuePair<object, object>> BuildKeyIndex(
@@ -264,12 +215,22 @@ internal class ComponentFactory
     }
 
     private static object CreateEmptyInstance(Type type) =>
-        RuntimeHelpers.GetUninitializedObject(type).WrapIfValueType();
+        RuntimeHelpers.GetUninitializedObject(type);
 
     private static string GetPropertyKeyOrThrow(object? key, Type componentType, string memberName) =>
         key as string
         ?? throw new InvalidOperationException(
             $"Component '{componentType.FullName}' received a non-string property key ('{key ?? "<null>"}') while resolving member '{memberName}'. Check whether the template schema is correct.");
+
+    private static T SharedScript<T>(string source, Func<string, T> create)
+        where T : class =>
+        (T)ScriptCache.GetOrAdd((typeof(T), source), static (key, factory) => factory(key.Source), create);
+
+    // Fast path first (no runtime generic instantiation, AOT-safe); the general provider only sees exotic conversions.
+    private object? ConvertScalar(object srcValue, Type destType) =>
+        AotValueConverter.TryConvert(srcValue, destType, StringConverters, out var converted)
+            ? converted
+            : _typeConversionProvider.Convert(srcValue.GetType(), destType, srcValue);
 
     private object? ConvertValueFromSrcToDestType(object srcValue, Type destType)
     {
@@ -290,8 +251,7 @@ internal class ComponentFactory
 
             // primitive or string!
             default:
-                convertResult =
-                    _typeConversionProvider.Convert(srcValue.GetType(), destType, srcValue);
+                convertResult = ConvertScalar(srcValue, destType);
                 break;
         }
 

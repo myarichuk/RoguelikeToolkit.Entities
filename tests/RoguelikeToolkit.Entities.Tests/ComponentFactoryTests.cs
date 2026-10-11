@@ -2,7 +2,7 @@ using Fasterflect;
 using RoguelikeToolkit.DiceExpression;
 using RoguelikeToolkit.Entities.Factory;
 using RoguelikeToolkit.Entities.Repository;
-using RoguelikeToolkit.Scripts;
+using RoguelikeToolkit.Entities.Scripting;
 
 // ReSharper disable ExceptionNotDocumented
 // ReSharper disable ExceptionNotDocumentedOptional
@@ -83,7 +83,20 @@ public class ComponentFactoryTests
         Assert.True(_componentFactory.TryCreateReferenceInstance<FoobarWithComponentScript>(
             (Dictionary<object, object>)template.Components["componentWithScript"], out var componentInstance));
 
-        Assert.Equal("component.RollResult = component.diceProperty.Roll();", GetScriptSource(componentInstance.Script!));
+        Assert.Equal("component.RollResult = component.diceProperty.Roll();", componentInstance.Script!.Source);
+    }
+
+    [Fact]
+    public void Template_scripts_with_identical_source_share_one_instance()
+    {
+        Assert.True(_repository.TryGetByName("simple-template-with-script", out var template));
+        var data = (Dictionary<object, object>)template.Components["componentWithScript"];
+
+        Assert.True(_componentFactory.TryCreateReferenceInstance<FoobarWithComponentScript>(data, out var first));
+        Assert.True(_componentFactory.TryCreateReferenceInstance<FoobarWithComponentScript>(data, out var second));
+
+        Assert.NotSame(first, second);
+        Assert.Same(first.Script, second.Script);
     }
 
     [Fact]
@@ -163,12 +176,6 @@ public class ComponentFactoryTests
         Assert.Equal("defgh", componentInstance.Embedded.AnotherStringProperty);
         Assert.Equal(234.1M, componentInstance.Embedded.DecimalProperty);
         Assert.True(componentInstance.Embedded.BoolProperty);
-    }
-
-    private static string? GetScriptSource(EntityComponentScript script)
-    {
-        var baseScript = script.GetFieldValue("_script", Flags.InstancePrivate);
-        return baseScript.GetFieldValue("_script", Flags.InstancePrivate) as string;
     }
 
     [Fact]

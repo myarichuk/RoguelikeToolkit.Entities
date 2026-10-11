@@ -1,6 +1,6 @@
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using DefaultEcs;
-using Fasterflect;
 using RoguelikeToolkit.Entities.Extensions;
 using YamlDotNet.Serialization;
 
@@ -16,7 +16,7 @@ namespace RoguelikeToolkit.Entities
         /// </summary>
         internal static readonly HashSet<string> PropertyNames =
             new(
-                typeof(EntityTemplate).Properties(Flags.InstancePublic)
+                typeof(EntityTemplate).GetProperties(BindingFlags.Instance | BindingFlags.Public)
                                                .Select(p => p.Name)
                                                .Where(propertyName => propertyName != nameof(EmbeddedTemplates)),
                 StringComparer.InvariantCultureIgnoreCase);
