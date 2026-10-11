@@ -55,8 +55,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-and-pack]
     steps:
+      # Check out the base branch: on pull_request events the default checkout is the PR merge ref, and the
+      # auto-commit below would push CHANGELOG.md to the (already merged) PR head branch instead of main.
       - name: Git Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
       - name: Update CHANGELOG
         id: changelog
         uses: Requarks/changelog-action@v1
