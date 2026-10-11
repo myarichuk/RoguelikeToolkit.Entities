@@ -9,9 +9,11 @@ on:
 env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
 
+# Merged-PR events all resolve github.ref to the base branch, so every merge shares this group. Queue instead of
+# cancelling: a cancelled run leaves its version to be tagged by the next run, which may then fail (v6.0.0 was lost so).
 concurrency:
   group: ${{ github.ref }}-publish-release
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build-and-pack:
@@ -77,9 +79,13 @@ jobs:
           body: ${{ steps.changelog.outputs.changes }}
           token: ${{ github.token }}
           tag: ${{needs.build-and-pack.outputs.tag}}
+      # The action defaults `branch` to github.head_ref: the merged, often already deleted, PR branch. Pin it to the
+      # base branch. Non-blocking: main is protected, and a rejected docs push must not skip NuGet/UPM publishing.
       - name: Commit CHANGELOG.md
         uses: stefanzweifel/git-auto-commit-action@v4
+        continue-on-error: true
         with:
+          branch: ${{ github.event.pull_request.base.ref }}
           commit_message: 'docs: update CHANGELOG.md for ${{needs.build-and-pack.outputs.tag}}'
           file_pattern: CHANGELOG.md
     outputs:
