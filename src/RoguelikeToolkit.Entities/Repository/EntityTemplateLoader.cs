@@ -15,6 +15,7 @@ internal class EntityTemplateLoader
     private static readonly TypeConversionProvider TypeConversionProvider = Factory.TypeConversionProviderFactory.Create();
 
     private readonly IDeserializer _deserializer = new DeserializerBuilder()
+        .WithObjectFactory(new AotSafeYamlObjectFactory())
         .IgnoreUnmatchedProperties()
         .IgnoreFields()
         .WithAttemptingUnquotedStringTypeDeserialization()

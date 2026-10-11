@@ -67,7 +67,7 @@ var factory = new EntityFactory(repository, world);
 if (factory.TryCreate("Goblin", out Entity goblinEntity))
 {
     // The goblinEntity now has:
-    // - Health component (Max: 15, Current: 10)
+    // - Health component (Max: 15, Current: 0) -- inheritance overrides whole components, not single fields
     // - Speed component (Value: 5)
     // - Attack component (Damage: 1d4)
     // - Tags: "AI", "CanMove", "Goblin"
@@ -164,6 +164,25 @@ Author in YAML (comments, readability), ship JSON or a packed single file for
 spawn-time loading — the same loader reads both (`.yaml` / `.json`,
 case-insensitive). Relative `$ref` / `$merge-ref` paths resolve against the
 referencing file's directory.
+
+## Unity / IL2CPP
+
+The `netstandard2.1` build has no Reflection.Emit on the load/spawn path, so it runs under IL2CPP.
+CI publishes a NativeAOT smoke test (stricter than IL2CPP: no JIT, no runtime generic instantiation) to keep it that way.
+
+- **Unity 2022.1+:** works as is.
+- **Stricter AOT (NativeAOT, older IL2CPP):** register each component type once at startup so its closed generic code exists:
+  `AotComponentRegistry.Register<Health>();`
+- **Managed code stripping:** component types (and the types of their nested struct/class members) are populated through
+  reflection only. Keep them from being stripped with `[Preserve]` or a `link.xml`:
+
+  ```xml
+  <linker>
+    <assembly fullname="MyGame.Components" preserve="all" />
+  </linker>
+  ```
+- **Scripts:** `RoguelikeToolkit.Scripts` (`Script.ExecuteOn` with extra `(name, value)` parameters) dispatches through
+  `dynamic`, which IL2CPP cannot run. Template scripts without extra parameters are unaffected.
 
 ## Docs
 

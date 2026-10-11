@@ -3,14 +3,22 @@
 Rule: stdlib before external deps, packed format before mmap/native. Each item below records the
 verdict, not just the option.
 
-## ObjectTreeWalker — adopted
+## ObjectTreeWalker / Fasterflect — removed (AOT)
 
-`ComponentFactory` maps template dictionaries onto component members through `ObjectMemberIterator`
-(cached accessors + traversal) instead of the old hand-rolled `PropertyInfo` loop (`O(M*P)` scan,
-`Last()` in the loop, per-call `GetInterfaces`). The hand-rolled path (`TrySetPropertyValue` /
-`TryGetDestPropertyFor` / `_typePropertyCache`) was dead code and has been removed, so there is exactly
-one member-mapping path. Semantics to remember: properties only — fields are ignored and reported
-through `EntityDiagnostics.WarningHandler`, same as any other unmatched template property.
+Both generate IL at runtime (`Sigil` / `DynamicMethod`), which Unity IL2CPP and NativeAOT cannot execute. Member
+mapping is now `ComponentMembers`: settable properties resolved once per type into a case-insensitive map, written
+with plain `PropertyInfo.SetValue` (get-only auto-properties through their backing field). Components are set on
+entities through one cached closed `ComponentSetter<T>` per type (virtual call + unbox, no `MethodInfo.Invoke`).
+Nested mappings recurse per level instead of walking a pre-built property tree. It turned out faster too
+(spawn 6-40x, allocation 5-8x lower), because the old path paid the IL generation and invoke-array costs per spawn.
+Semantics: properties only (any visibility), fields are reported as unmatched through `EntityDiagnostics`.
+
+## deniszykov.TypeConversion — fallback only
+
+Its non-generic `Convert(Type, Type, object)` instantiates `GetConverter<TFrom, TTo>` via `MakeGenericMethod`, which
+needs runtime generic instantiation over value types. `AotValueConverter` handles what templates contain (assignable
+values, numbers, strings, bools, enums, dice/script strings) with non-generic BCL calls first; the provider only sees
+exotic conversions.
 
 ## SharpArena — deferred
 

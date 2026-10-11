@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `EntityTemplateRepository.RemoveTemplate` removes a template together with its tag index entries.
 - `EntityTemplateRepository.LoadTemplate` overload accepting in-memory yaml/json string content.
 - Shared templates (repository store, effective-template cache) stay shared (flyweight) for reads; mutating one warns through `EntityDiagnostics` (silent by default) instead of corrupting state silently.
+- Unity IL2CPP / AOT support: no Reflection.Emit anywhere on the load/spawn path. `Fasterflect` and `ObjectTreeWalker` (Sigil IL emission) are no longer dependencies; component members are written through cached plain reflection, components are set through cached closed generic setters, and primitive/enum/dice/script conversions take an AOT-safe path before falling back to `deniszykov.TypeConversion`.
+- `AotComponentRegistry.Register<T>()`: optional per-component AOT hint (closed generic setter + trimming annotations) for runtimes that cannot instantiate generics at runtime (NativeAOT, IL2CPP before 2022.1).
+- NativeAOT smoke test (`tests/RoguelikeToolkit.Entities.AotSmoke`, CI job) as the IL2CPP proxy: load, inheritance, nested struct/class, value, dice and global components, mass spawn.
+
+### :zap: Performance
+- Spawning is 6-40x faster with 5-8x less allocation (Spawn_Simple 11.5 ms -> 0.87 ms per 100 entities, 1.28 MB -> 163 KB; same machine, BenchmarkDotNet short job) from dropping per-type IL generation and `MethodInfo.Invoke` on the hot path.
 
 ### :bug: Fixes
 - `EntityExtensions` child iterator no longer leaks pooled traversal state between calls; tagless entities share an immutable empty tag set; parent-link bookkeeping is thread-safe.
@@ -19,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Duplicate embedded template names and duplicate case-only component properties now warn/fail instead of silently dropping data.
 - Single `TypeConversionProvider` factory and single null-guard helper remove four duplicated setups and all repeated `#if` blocks.
 - `EntityFactory` spawn errors now name the template and component involved.
+- YAML loading no longer depends on reflection-only container constructors (stripped by AOT linkers): `Dictionary`/`List` containers are created directly.
+- Component registry tolerates runtimes that cannot enumerate assembly references (scans instead of failing).
+- `IValueComponent<T>` detection compares the generic definition instead of a name substring.
+- Nested template mappings now report their own unmatched keys through `EntityDiagnostics` (previously only top-level keys were checked).
 
 ## [v4.0.6.0] - 2022-09-25
 ### :recycle: Refactors

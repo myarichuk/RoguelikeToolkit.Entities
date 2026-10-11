@@ -46,3 +46,19 @@ jobs:
       run: dotnet build --no-restore
     - name: Test
       run: dotnet test --no-build --verbosity normal
+
+  aot-smoke:
+    # No JIT, no Reflection.Emit, no runtime generic instantiation over value types: stricter than Unity IL2CPP,
+    # so a pass is the CI proxy for "runs under IL2CPP".
+    name: NativeAOT smoke (IL2CPP proxy)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.0.x
+    - name: Publish NativeAOT
+      run: dotnet publish tests/RoguelikeToolkit.Entities.AotSmoke -c Release -r linux-x64 -o aot-smoke
+    - name: Run
+      run: ./aot-smoke/RoguelikeToolkit.Entities.AotSmoke

@@ -1,6 +1,4 @@
-using System.Reflection;
 using DefaultEcs;
-using Fasterflect;
 using RoguelikeToolkit.Entities.Exceptions;
 using RoguelikeToolkit.Entities.Extensions;
 using RoguelikeToolkit.Entities.Repository;
@@ -15,11 +13,6 @@ namespace RoguelikeToolkit.Entities.Factory;
 /// </summary>
 public class EntityFactory
 {
-    // Assembly content cannot change at runtime, so resolve the setter types once
-    // instead of scanning the assembly per factory (saves most of the ctor cost).
-    private static readonly IReadOnlyList<Type> ComponentInEntitySetterTypes =
-        Assembly.GetExecutingAssembly().TypesImplementing<BaseComponentInEntitySetter>().ToList();
-
     private readonly EntityTemplateRepository _entityRepository;
     private readonly ComponentFactory _componentFactory = new();
     private readonly ComponentTypeRegistry _componentTypeRegistry = new();
@@ -42,11 +35,12 @@ public class EntityFactory
         _world = world;
         _inheritanceResolver = new EntityInheritanceResolver(_entityRepository.TryGetByName);
 
-        _componentInEntitySetters =
-            ComponentInEntitySetterTypes
-                .Select(type =>
-                    (BaseComponentInEntitySetter)Activator.CreateInstance(type, world)!)
-                .ToList();
+        // Explicit list instead of an assembly scan + Activator: nothing for an IL2CPP/trimming linker to strip.
+        _componentInEntitySetters = new BaseComponentInEntitySetter[]
+        {
+            new GlobalComponentInEntitySetter(world),
+            new RegularComponentInEntitySetter(world),
+        };
     }
 
     /// <summary>
@@ -194,7 +188,7 @@ public class EntityFactory
 
         throw new InvalidOperationException(
             $"No component setter found for component type '{componentType.FullName}' in template '{template.Name ?? "<unnamed>"}'. " +
-            "This is not supposed to happen and is likely a bug (or the library was trimmed so the setter scan found nothing).");
+            "This is not supposed to happen and is likely a bug.");
     }
 
     private Type GetComponentTypeOrThrow(KeyValuePair<string, object> componentRawData)
