@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v5.1.0] - 2026-10-11
+### :sparkles: New Features
+- [`4336633`](https://github.com/myarichuk/RoguelikeToolkit.Entities/commit/43366335b93b8f62cf97b3d0f1fe24c3a88aa5a9) - Unity package (com.rogueliketoolkit.entities) published as a release asset for OpenUPM *(commit by [@claude](https://github.com/claude))*
+
+
 ## [Unreleased]
 ### :sparkles: New Features
 - Unity package `com.rogueliketoolkit.entities` (OpenUPM): prebuilt `netstandard2.1` DLL, dependencies from UnityNuGet (`org.nuget.*`), and an editor hook that hands the package's `link.xml` to UnityLinker. Every release also attaches a `-unity-plugins.zip` with the full DLL closure.
@@ -109,3 +114,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [v4.0.4.0]: https://github.com/myarichuk/RoguelikeToolkit.Entities/compare/v4.0.3.0...v4.0.4.0
 [v4.0.6.0]: https://github.com/myarichuk/RoguelikeToolkit.Entities/compare/v4.0.4.0...v4.0.6.0
 [v5.0.0.0]: https://github.com/myarichuk/RoguelikeToolkit.Entities/compare/v4.2.2.0...v5.0.0.0
+[v5.1.0]: https://github.com/myarichuk/RoguelikeToolkit.Entities/compare/v5.0.0.0...v5.1.0
