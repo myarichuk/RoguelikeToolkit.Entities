@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using DefaultEcs;
-using Microsoft.Extensions.ObjectPool;
 using RoguelikeToolkit.Entities.Components;
 
 namespace RoguelikeToolkit.Entities.Extensions
@@ -256,11 +255,9 @@ namespace RoguelikeToolkit.Entities.Extensions
         /// </summary>
         private readonly struct EntityChildrenIterator : IDisposable
         {
-            private static readonly ObjectPool<Queue<Entity>> TraverseQueuePool =
-                Entities.ObjectPoolProvider.Instance.Create(new ThreadSafeObjectPoolPolicy<Queue<Entity>>());
+            private static readonly Pool<Queue<Entity>> TraverseQueuePool = new();
 
-            private static readonly ObjectPool<HashSet<Entity>> VisitedPool =
-                Entities.ObjectPoolProvider.Instance.Create(new ThreadSafeObjectPoolPolicy<HashSet<Entity>>());
+            private static readonly Pool<HashSet<Entity>> VisitedPool = new();
 
             private readonly HashSet<Entity> _visited;
             private readonly Queue<Entity> _traversalQueue;
@@ -269,8 +266,8 @@ namespace RoguelikeToolkit.Entities.Extensions
             public EntityChildrenIterator(in Entity root)
             {
                 _root = root;
-                _visited = VisitedPool.Get();
-                _traversalQueue = TraverseQueuePool.Get();
+                _visited = VisitedPool.Rent();
+                _traversalQueue = TraverseQueuePool.Rent();
             }
 
             /// <summary>

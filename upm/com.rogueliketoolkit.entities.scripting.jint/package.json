@@ -1,0 +1,29 @@
+{
+  "name": "com.rogueliketoolkit.entities.scripting.jint",
+  "displayName": "RoguelikeToolkit Entities Scripting (Jint)",
+  "version": "0.0.0",
+  "unity": "2021.3",
+  "description": "JavaScript (Jint) scripts for RoguelikeToolkit Entities templates: pre-parsed, shared script components and non-generic component interop. Call EntityScripting.Register() at startup. IL2CPP-safe netstandard2.1 build.",
+  "license": "MIT",
+  "author": {
+    "name": "Michael Yarichuk"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/myarichuk/RoguelikeToolkit.Entities.git"
+  },
+  "documentationUrl": "https://github.com/myarichuk/RoguelikeToolkit.Entities#scripts",
+  "changelogUrl": "https://github.com/myarichuk/RoguelikeToolkit.Entities/blob/main/CHANGELOG.md",
+  "licensesUrl": "https://github.com/myarichuk/RoguelikeToolkit.Entities/blob/main/LICENSE",
+  "keywords": [
+    "ecs",
+    "entities",
+    "scripting",
+    "roguelike",
+    "jint"
+  ],
+  "dependencies": {
+    "com.rogueliketoolkit.entities": "0.0.0",
+    "org.nuget.jint": "4.16.2"
+  }
+}

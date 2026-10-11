@@ -1,5 +1,3 @@
-using Microsoft.Extensions.ObjectPool;
-
 namespace RoguelikeToolkit.Entities.Factory
 {
     /// <summary>
@@ -15,11 +13,9 @@ namespace RoguelikeToolkit.Entities.Factory
     /// </remarks>
     internal readonly struct EmbeddedTemplateGraphIterator : IDisposable
     {
-        private static readonly ObjectPool<Queue<EntityTemplate>> QueuePool =
-            ObjectPoolProvider.Instance.Create<Queue<EntityTemplate>>();
+        private static readonly Pool<Queue<EntityTemplate>> QueuePool = new();
 
-        private static readonly ObjectPool<Stack<EntityTemplate>> StackPool =
-            ObjectPoolProvider.Instance.Create<Stack<EntityTemplate>>();
+        private static readonly Pool<Stack<EntityTemplate>> StackPool = new();
 
         private readonly EntityTemplate _root;
         private readonly GraphTraversalType _traversalType;
@@ -35,8 +31,8 @@ namespace RoguelikeToolkit.Entities.Factory
         {
             _root = root;
             _traversalType = traversalType;
-            _traversalQueue = QueuePool.Get();
-            _traversalStack = StackPool.Get();
+            _traversalQueue = QueuePool.Rent();
+            _traversalStack = StackPool.Rent();
         }
 
         /// <summary>

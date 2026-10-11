@@ -9,7 +9,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-	  <PackageReference Include="Antlr4.Runtime" Version="*" />
 	  <PackageReference Include="Microsoft.NET.Test.Sdk" Version="*" />
 	  <PackageReference Include="xunit" Version="*" />
 	  <PackageReference Include="xunit.runner.visualstudio" Version="*">
@@ -27,6 +26,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\RoguelikeToolkit.Entities\RoguelikeToolkit.Entities.csproj" />
+    <ProjectReference Include="..\..\src\RoguelikeToolkit.Entities.Scripting.Jint\RoguelikeToolkit.Entities.Scripting.Jint.csproj" />
   </ItemGroup>
 
   <ItemGroup>

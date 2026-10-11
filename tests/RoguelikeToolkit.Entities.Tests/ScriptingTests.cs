@@ -1,6 +1,6 @@
 using DefaultEcs;
 using Jint.Runtime;
-using RoguelikeToolkit.Entities.Scripting;
+using RoguelikeToolkit.Entities.Scripting.Jint;
 
 // ReSharper disable ExceptionNotDocumented
 #pragma warning disable CS1591
@@ -10,6 +10,8 @@ public sealed class ScriptingTests : IDisposable
 {
     private readonly World _world = new();
     private readonly ScriptHost _host = new(new ScriptHostOptions { ReferenceTypes = new[] { typeof(Health), typeof(Inventory) } });
+
+    public ScriptingTests() => EntityScripting.Register();
 
     public void Dispose()
     {

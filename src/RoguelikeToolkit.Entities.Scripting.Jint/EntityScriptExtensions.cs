@@ -1,9 +1,9 @@
 using DefaultEcs;
 using Jint.Native;
 using Jint.Runtime.Interop;
-using RoguelikeToolkit.Entities.Factory;
+using RoguelikeToolkit.Entities.Extensions;
 
-namespace RoguelikeToolkit.Entities.Scripting
+namespace RoguelikeToolkit.Entities.Scripting.Jint
 {
     /// <summary>
     /// Non-generic component access for scripts (JavaScript cannot call <c>Entity.Get&lt;T&gt;()</c>), registered as
@@ -17,7 +17,7 @@ namespace RoguelikeToolkit.Entities.Scripting
     /// never binds from script. Internal so these script-only overloads do not show up on <see cref="Entity"/> in C#.
     /// </para>
     /// <para>
-    /// Dispatches through the factory's cached closed <see cref="ComponentAccessor{T}"/> (no <c>MakeGenericMethod</c> +
+    /// Thin adapters over <see cref="EntityComponentExtensions"/> (cached closed accessors, no <c>MakeGenericMethod</c> +
     /// <c>Invoke</c> per call). On runtimes without runtime generic instantiation over value types (NativeAOT, IL2CPP
     /// before 2022.1) component types must be registered via <see cref="AotComponentRegistry.Register{T}"/>.
     /// Value-type components come back as a copy: write it back with <c>SetComponent</c>.
@@ -32,7 +32,7 @@ namespace RoguelikeToolkit.Entities.Scripting
         /// <param name="componentType">type reference (a <see cref="ScriptHostOptions.ReferenceTypes"/> global)</param>
         /// <returns>true if present</returns>
         public static bool HasComponent(this Entity entity, JsValue componentType) =>
-            ComponentAccessor.For(ResolveType(componentType)).Has(entity);
+            entity.HasComponent(ResolveType(componentType));
 
         /// <summary>
         /// Returns the entity's component of the referenced type (a copy for value types).
@@ -41,7 +41,7 @@ namespace RoguelikeToolkit.Entities.Scripting
         /// <param name="componentType">type reference (a <see cref="ScriptHostOptions.ReferenceTypes"/> global)</param>
         /// <returns>the component</returns>
         public static object? GetComponent(this Entity entity, JsValue componentType) =>
-            ComponentAccessor.For(ResolveType(componentType)).Get(entity);
+            entity.GetComponent(ResolveType(componentType));
 
         /// <summary>
         /// Sets (adds or replaces) the entity's component of the referenced type.
@@ -49,18 +49,8 @@ namespace RoguelikeToolkit.Entities.Scripting
         /// <param name="entity">entity</param>
         /// <param name="componentType">type reference (a <see cref="ScriptHostOptions.ReferenceTypes"/> global)</param>
         /// <param name="value">component instance of that type</param>
-        public static void SetComponent(this Entity entity, JsValue componentType, object value)
-        {
-            var type = ResolveType(componentType);
-            if (value == null || !type.IsInstanceOfType(value))
-            {
-                throw new ArgumentException(
-                    $"Expected a component of type '{type.FullName}', got '{value?.GetType().FullName ?? "null"}'.",
-                    nameof(value));
-            }
-
-            ComponentAccessor.For(type).Set(entity, value);
-        }
+        public static void SetComponent(this Entity entity, JsValue componentType, object value) =>
+            entity.SetComponent(ResolveType(componentType), value);
 
         /// <summary>
         /// Removes the entity's component of the referenced type (no-op when absent).
@@ -68,7 +58,7 @@ namespace RoguelikeToolkit.Entities.Scripting
         /// <param name="entity">entity</param>
         /// <param name="componentType">type reference (a <see cref="ScriptHostOptions.ReferenceTypes"/> global)</param>
         public static void RemoveComponent(this Entity entity, JsValue componentType) =>
-            ComponentAccessor.For(ResolveType(componentType)).Remove(entity);
+            entity.RemoveComponent(ResolveType(componentType));
 
         private static Type ResolveType(JsValue componentType) =>
             componentType is IObjectWrapper { Target: Type type }

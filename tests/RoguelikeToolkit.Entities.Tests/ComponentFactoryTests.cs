@@ -1,8 +1,7 @@
 using Fasterflect;
-using RoguelikeToolkit.DiceExpression;
 using RoguelikeToolkit.Entities.Factory;
 using RoguelikeToolkit.Entities.Repository;
-using RoguelikeToolkit.Entities.Scripting;
+using RoguelikeToolkit.Entities.Scripting.Jint;
 
 // ReSharper disable ExceptionNotDocumented
 // ReSharper disable ExceptionNotDocumentedOptional
@@ -23,6 +22,7 @@ public class ComponentFactoryTests
 
     public ComponentFactoryTests()
     {
+        EntityScripting.Register();
         _repository.LoadTemplateFolder("TemplatesForComponentFactory");
     }
 
@@ -70,9 +70,8 @@ public class ComponentFactoryTests
         Assert.True(_componentFactory.TryCreateReferenceInstance<DiceComponent>(
             (Dictionary<object, object>)template.Components["diceComponent"], out var componentInstance));
 
-        Assert.Equal(
-            GetAstStringFrom(Dice.Parse("3d6")),
-            GetAstStringFrom(componentInstance.DiceProperty!));
+        Assert.Equal("3d6", componentInstance.DiceProperty!.Expression);
+        Assert.InRange(componentInstance.DiceProperty.Roll(new Random(42)), 3, 18);
     }
 
     [Fact]
@@ -193,12 +192,6 @@ public class ComponentFactoryTests
         Assert.Equal("defgh", componentInstance.Embedded.AnotherStringProperty);
         Assert.Equal(234.1M, componentInstance.Embedded.DecimalProperty);
         Assert.True(componentInstance.Embedded.BoolProperty);
-    }
-
-    private string GetAstStringFrom(Dice dice)
-    {
-        var ast = dice.GetFieldValue("_diceAst");
-        return ((dynamic)ast).ToStringTree(); // assuming antlr4 ast
     }
 
     internal struct FoobarStruct

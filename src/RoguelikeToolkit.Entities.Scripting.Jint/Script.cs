@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 using Jint;
 using JsScript = Acornima.Ast.Script;
 
-namespace RoguelikeToolkit.Entities.Scripting
+namespace RoguelikeToolkit.Entities.Scripting.Jint
 {
     /// <summary>
     /// An immutable, pre-parsed JavaScript snippet that runs against one or two CLR values on a <see cref="ScriptHost"/>.

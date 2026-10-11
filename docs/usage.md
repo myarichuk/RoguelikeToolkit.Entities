@@ -35,8 +35,8 @@ Hard failures (unknown component type, null value, cycles) throw with template +
 ## Pooling
 
 Entity recycling is DefaultEcs' job (`World`). The library only pools short-lived traversal buffers
-(`Queue`/`Stack` in `EmbeddedTemplateGraphIterator`, entity sets in `EntityExtensions`) through
-`Microsoft.Extensions.ObjectPool` (stdlib `DefaultObjectPoolProvider`). Pooled containers are cleared
+(`Queue`/`Stack` in `EmbeddedTemplateGraphIterator`, entity sets in `EntityExtensions`) through a
+small internal bounded lock-free pool. Pooled containers are cleared
 on return and iterators are single-threaded; spawning itself rents nothing per spawn.
 
 ## Save/load
