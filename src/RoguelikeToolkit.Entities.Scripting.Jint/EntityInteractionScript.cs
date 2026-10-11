@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 using DefaultEcs;
 
-namespace RoguelikeToolkit.Entities.Scripting
+namespace RoguelikeToolkit.Entities.Scripting.Jint
 {
     /// <summary>
     /// A script that runs against two entities, bound to the globals <c>source</c> and <c>target</c>.

@@ -1,7 +1,7 @@
 using Fasterflect;
 using RoguelikeToolkit.Entities.Factory;
 using RoguelikeToolkit.Entities.Repository;
-using RoguelikeToolkit.Entities.Scripting;
+using RoguelikeToolkit.Entities.Scripting.Jint;
 
 // ReSharper disable ExceptionNotDocumented
 // ReSharper disable ExceptionNotDocumentedOptional
@@ -22,6 +22,7 @@ public class ComponentFactoryTests
 
     public ComponentFactoryTests()
     {
+        EntityScripting.Register();
         _repository.LoadTemplateFolder("TemplatesForComponentFactory");
     }
 

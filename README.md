@@ -11,7 +11,8 @@ Targets `net10.0` and `netstandard2.1` (Unity 2021.3+, IL2CPP-safe). MIT.
 
 ## Install
 
-- **.NET:** `dotnet add package RoguelikeToolkit.Entities`
+- **.NET:** `dotnet add package RoguelikeToolkit.Entities` (depends on DefaultEcs and YamlDotNet only)
+- **Scripting (optional):** `dotnet add package RoguelikeToolkit.Entities.Scripting.Jint` (adds Jint)
 - **Unity:** see [Unity / IL2CPP](#unity--il2cpp).
 
 ## Features
@@ -19,8 +20,10 @@ Targets `net10.0` and `netstandard2.1` (Unity 2021.3+, IL2CPP-safe). MIT.
 - **YAML and JSON support:** Entity templates can be written in human-readable `.yaml` or `.json` formats.
 - **Inheritance:** Templates can inherit from one or more base templates, mixing components and tags together.
 - **Embedded templates:** Hierarchies are fully supported, you can embed child entities inside templates.
-- **Scripts:** Components can carry JavaScript (Jint) scripts for data-driven behavior; parsed once, shared, AOT-safe.
+- **Scripts (optional package):** Components can carry JavaScript (Jint) scripts for data-driven behavior; parsed once, shared, AOT-safe.
 - **Dice:** `Dice`-typed component members are parsed from dice notation (`2d6+3`, `4d6k3`); built in, no extra dependencies.
+- **Custom value types:** register a parser once (`TemplateValueParsers.Register<T>(...)`) and template strings convert
+  to your type; numbers convert range-checked and never lose data silently.
 
 ## Quick Start
 
@@ -152,10 +155,35 @@ Dice.TryParse(text, out var d); // no exceptions on bad input
 Case-insensitive, whitespace ignored. Bounds: at most 1000 dice per term, 1,000,000 sides. Expressions are compiled
 once to a flat postfix program; rolling is allocation-free in steady state and instances are safe to share across threads.
 
+### Template value conversion
+
+Template scalars convert to component member types in this order: already assignable; a parser registered for the
+member type; enums (case-insensitive name or number); primitives, `string`, `decimal` (invariant culture);
+`Guid`, `TimeSpan`, `DateTime`, `DateTimeOffset`, `Uri`, `Version` from strings. Out-of-range numbers throw
+`OverflowException`, and a fractional number assigned to an integral member throws `FormatException` (`2.0` is fine,
+`2.5` is not). Anything else throws `InvalidCastException` naming the type. Register parsers for your own types:
+
+```csharp
+TemplateValueParsers.Register(static s => Color.FromHex(s)); // thread-safe, last registration wins
+```
+
+`Dice` is registered out of the box. Parsers run on every spawn, so cache inside the parser when the parsed value is
+immutable (the dice and script parsers share one instance per distinct source text).
+
 ### Scripts
 
-Script-typed component members (`EntityScript`, `EntityComponentScript`, `EntityInteractionScript`, `Script`, all in
-`RoguelikeToolkit.Entities.Scripting`) are populated from template strings:
+Scripting is a separate package, `RoguelikeToolkit.Entities.Scripting.Jint`, so the core library carries no
+JavaScript engine. Register it once at startup:
+
+```csharp
+using RoguelikeToolkit.Entities.Scripting.Jint;
+
+EntityScripting.Register(); // before spawning templates with script members
+```
+
+Script-typed component members (`EntityScript`, `EntityComponentScript`, `EntityInteractionScript`, `Script`) are
+then populated from template strings. Without the registration, spawning such a template throws
+`InvalidCastException` naming the script type.
 
 ```yaml
 Components:
@@ -187,8 +215,8 @@ behavior.Regen!.TryExecuteOn<Health>(host, goblin, ("amount", 2)); // writes the
   every entity spawned from the template. Keep state in components.
 - Each execution runs in its own function scope (`var`/`function` do not leak between scripts, `return` exits early);
   bindings (`entity`, `component`, `source`/`target`, arguments) are cleared afterwards.
-- `entity.HasComponent/GetComponent/SetComponent/RemoveComponent(Type)` take any type exposed via
-  `ScriptHostOptions.ReferenceTypes`. Value-type components come back as copies: write them back with `SetComponent`.
+- In scripts, `entity.HasComponent/GetComponent/SetComponent/RemoveComponent(Type)` take any type exposed via
+  `ScriptHostOptions.ReferenceTypes` (the same calls exist in C# as `EntityComponentExtensions`). Value-type components come back as copies: write them back with `SetComponent`.
 - Limits: 500 statements and recursion depth 1024 per execution by default; `Timeout` and `MemoryLimitBytes` are opt-in.
 - `ScriptHost` is not thread-safe (neither is a Jint engine); scripts are, and can run on any number of hosts.
 
@@ -245,10 +273,11 @@ every PR to keep it that way.
 
 ### Install
 
-The UPM package `com.rogueliketoolkit.entities` ships the prebuilt `netstandard2.1` DLL. Its third-party
-dependencies (DefaultEcs, YamlDotNet, Jint, ...) come from [UnityNuGet](https://github.com/bdovaz/UnityNuGet)
-as `org.nuget.*` packages instead of being bundled: Unity refuses two copies of the same DLL, and Jint/YamlDotNet
-are shared with `RoguelikeToolkit.World`. Add both scoped registries to `Packages/manifest.json`:
+The UPM package `com.rogueliketoolkit.entities` ships the prebuilt `netstandard2.1` DLL; the optional
+`com.rogueliketoolkit.entities.scripting.jint` adds scripting. Their third-party dependencies (DefaultEcs and
+YamlDotNet for core, Jint for scripting) come from [UnityNuGet](https://github.com/bdovaz/UnityNuGet) as
+`org.nuget.*` packages instead of being bundled: Unity refuses two copies of the same DLL, and Jint/YamlDotNet are
+shared with `RoguelikeToolkit.World`. Add both scoped registries to `Packages/manifest.json`:
 
 ```json
 {
@@ -265,12 +294,13 @@ are shared with `RoguelikeToolkit.World`. Add both scoped registries to `Package
     }
   ],
   "dependencies": {
-    "com.rogueliketoolkit.entities": "5.1.0"
+    "com.rogueliketoolkit.entities": "6.0.0",
+    "com.rogueliketoolkit.entities.scripting.jint": "6.0.0"
   }
 }
 ```
 
-(`openupm add com.rogueliketoolkit.entities` does the OpenUPM half.)
+Drop the scripting line if you do not use scripts. (`openupm add com.rogueliketoolkit.entities` does the OpenUPM half.)
 
 **Without registries:** every GitHub Release also carries `RoguelikeToolkit.Entities-<version>-unity-plugins.zip`
 with the whole DLL closure plus a `link.xml`. Unzip into `Assets/Plugins/RoguelikeToolkit.Entities/`, skipping any DLL
@@ -282,7 +312,8 @@ your project already has (`System.Runtime.CompilerServices.Unsafe` often is).
 - **Older IL2CPP / NativeAOT:** register each component type once at startup so its closed generic code exists:
   `AotComponentRegistry.Register<Health>();`
 - **Managed code stripping:** the package hands UnityLinker its own `link.xml` (an editor hook; Unity ignores
-  `link.xml` files inside packages), preserving this library, DefaultEcs, YamlDotNet, TypeConversion and Jint. Your
+  `link.xml` files inside packages), preserving this library, DefaultEcs and YamlDotNet (the scripting package does
+  the same for itself and Jint). Your
   component types (and the types of their nested struct/class members) are populated by reflection only, so they
   need `[Preserve]` or a `link.xml` of your own under `Assets/`:
 

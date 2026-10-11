@@ -1,7 +1,7 @@
 using System.Reflection;
 using Jint;
 
-namespace RoguelikeToolkit.Entities.Scripting
+namespace RoguelikeToolkit.Entities.Scripting.Jint
 {
     /// <summary>
     /// Sandbox limits and interop surface of a <see cref="ScriptHost"/>.

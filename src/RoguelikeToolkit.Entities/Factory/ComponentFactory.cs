@@ -1,11 +1,7 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
-using deniszykov.TypeConversion;
-using Microsoft.Extensions.Options;
 using RoguelikeToolkit.Entities.Components;
 using RoguelikeToolkit.Entities.Extensions;
-using RoguelikeToolkit.Entities.Scripting;
-using static deniszykov.TypeConversion.ConversionOptions;
 
 namespace RoguelikeToolkit.Entities.Factory;
 
@@ -19,55 +15,6 @@ internal class ComponentFactory
 {
     // IValueComponent{T} payload types are per-type constants; calling GetInterfaces() per instance was pure overhead.
     private static readonly ConcurrentDictionary<Type, Type> ValueComponentPayloadCache = new();
-
-    // Dice expressions and scripts are immutable once parsed, so identical strings share one instance per target type.
-    private static readonly ConcurrentDictionary<string, Dice> DiceParseCache = new();
-    private static readonly ConcurrentDictionary<(Type Type, string Source), object> ScriptCache = new();
-
-    // String-parsed component member types. Consulted by the AOT-safe fast path first; the same parsers are also
-    // registered on the general provider below so its behavior is unchanged for anything that falls through.
-    private static readonly IReadOnlyDictionary<Type, Func<string, object>> StringConverters =
-        new Dictionary<Type, Func<string, object>>
-        {
-            [typeof(Dice)] = static src => DiceParseCache.GetOrAdd(src, static s => Dice.Parse(s)),
-            [typeof(EntityScript)] = static src => SharedScript(src, static s => new EntityScript(s)),
-            [typeof(EntityComponentScript)] = static src => SharedScript(src, static s => new EntityComponentScript(s)),
-            [typeof(EntityInteractionScript)] = static src => SharedScript(src, static s => new EntityInteractionScript(s)),
-            [typeof(Script)] = static src => SharedScript(src, static s => new Script(s)),
-        };
-
-    // Dice/script conversions are stateless registrations over process-wide caches,
-    // so all factories share one provider built once instead of per factory.
-    private static readonly Lazy<TypeConversionProvider> SharedProvider = new(
-        () =>
-        {
-            var provider = TypeConversionProviderFactory.Create();
-            provider.RegisterConversion<string, Dice>(
-                (src, _, __) =>
-                    DiceParseCache.GetOrAdd(src, static s => Dice.Parse(s)),
-                ConversionQuality.Custom);
-
-            provider.RegisterConversion<string, EntityScript>(
-                (src, _, __) => (EntityScript)StringConverters[typeof(EntityScript)](src),
-                ConversionQuality.Custom);
-
-            provider.RegisterConversion<string, EntityComponentScript>(
-                (src, _, __) => (EntityComponentScript)StringConverters[typeof(EntityComponentScript)](src),
-                ConversionQuality.Custom);
-
-            provider.RegisterConversion<string, EntityInteractionScript>(
-                (src, _, __) => (EntityInteractionScript)StringConverters[typeof(EntityInteractionScript)](src),
-                ConversionQuality.Custom);
-
-            provider.RegisterConversion<string, Script>(
-                (src, _, __) => (Script)StringConverters[typeof(Script)](src),
-                ConversionQuality.Custom);
-
-            return provider;
-        },
-        LazyThreadSafetyMode.ExecutionAndPublication);
-
-    private readonly TypeConversionProvider _typeConversionProvider = SharedProvider.Value;
 
     /// <summary>
     /// Try and create an instance of specified type from the data provided by the dictionary.
@@ -221,15 +168,8 @@ internal class ComponentFactory
         ?? throw new InvalidOperationException(
             $"Component '{componentType.FullName}' received a non-string property key ('{key ?? "<null>"}') while resolving member '{memberName}'. Check whether the template schema is correct.");
 
-    private static T SharedScript<T>(string source, Func<string, T> create)
-        where T : class =>
-        (T)ScriptCache.GetOrAdd((typeof(T), source), static (key, factory) => factory(key.Source), create);
-
-    // Fast path first (no runtime generic instantiation, AOT-safe); the general provider only sees exotic conversions.
-    private object? ConvertScalar(object srcValue, Type destType) =>
-        AotValueConverter.TryConvert(srcValue, destType, StringConverters, out var converted)
-            ? converted
-            : _typeConversionProvider.Convert(srcValue.GetType(), destType, srcValue);
+    private static object ConvertScalar(object srcValue, Type destType) =>
+        TemplateValueConverter.Convert(srcValue, destType);
 
     private object? ConvertValueFromSrcToDestType(object srcValue, Type destType)
     {

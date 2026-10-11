@@ -1,6 +1,6 @@
 using DefaultEcs;
 
-namespace RoguelikeToolkit.Entities.Scripting
+namespace RoguelikeToolkit.Entities.Scripting.Jint
 {
     /// <summary>
     /// A script that runs against entity components: one component bound to <c>component</c>, or a pair bound to

@@ -4,7 +4,7 @@ using Jint;
 using Jint.Native;
 using Jint.Runtime.Interop;
 
-namespace RoguelikeToolkit.Entities.Scripting
+namespace RoguelikeToolkit.Entities.Scripting.Jint
 {
     /// <summary>
     /// One Jint engine that executes any number of scripts. Scripts themselves are immutable, pre-parsed and shared;

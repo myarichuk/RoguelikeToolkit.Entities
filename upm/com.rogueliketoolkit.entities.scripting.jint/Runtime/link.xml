@@ -1,0 +1,9 @@
+<!--
+  UnityLinker only reads link.xml files under Assets/; Editor/LinkXmlInjector.cs hands this one over during builds.
+  Jint binds script interop (EntityScriptExtensions, your component types) by reflection only.
+  Your own component types need the same protection: [Preserve] or a link.xml entry of your own.
+-->
+<linker>
+  <assembly fullname="RoguelikeToolkit.Entities.Scripting.Jint" preserve="all" />
+  <assembly fullname="Jint" preserve="all" />
+</linker>

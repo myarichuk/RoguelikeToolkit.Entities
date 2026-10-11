@@ -3,7 +3,7 @@ using RoguelikeToolkit.Entities;
 using RoguelikeToolkit.Entities.Components;
 using RoguelikeToolkit.Entities.Factory;
 using RoguelikeToolkit.Entities.Repository;
-using RoguelikeToolkit.Entities.Scripting;
+using RoguelikeToolkit.Entities.Scripting.Jint;
 
 // Statically known closed generics: what a stricter AOT runtime needs (optional on IL2CPP 2022.1+).
 AotComponentRegistry.Register<Health>();
@@ -13,6 +13,9 @@ AotComponentRegistry.Register<Speed>();
 AotComponentRegistry.Register<Weapon>();
 AotComponentRegistry.Register<Rules>();
 AotComponentRegistry.Register<Behavior>();
+
+// script members in templates (Behavior.OnHit/Regen) parse through the Jint package's template parsers
+EntityScripting.Register();
 
 var dir = Path.Combine(Path.GetTempPath(), "rltk-aot-smoke-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(dir);

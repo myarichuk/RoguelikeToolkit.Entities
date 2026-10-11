@@ -13,14 +13,33 @@ Nested mappings recurse per level instead of walking a pre-built property tree. 
 (spawn 6-40x, allocation 5-8x lower), because the old path paid the IL generation and invoke-array costs per spawn.
 Semantics: properties only (any visibility), fields are reported as unmatched through `EntityDiagnostics`.
 
-## deniszykov.TypeConversion — fallback only
+## deniszykov.TypeConversion — removed (6.0)
 
 Its non-generic `Convert(Type, Type, object)` instantiates `GetConverter<TFrom, TTo>` via `MakeGenericMethod`, which
-needs runtime generic instantiation over value types. `AotValueConverter` handles what templates contain (assignable
-values, numbers, strings, bools, enums, dice/script strings) with non-generic BCL calls first; the provider only sees
-exotic conversions.
+needs runtime generic instantiation over value types. It had already been demoted to a fallback behind the in-house
+AOT-safe converter, and no test template reached the fallback (verified by instrumenting it). What it did on the
+paths it still owned was wrong for game data: fractional -> integral truncated (`2.7` -> `2`) and out-of-range values
+saturated (`1e20` -> `int.MaxValue`). `TemplateValueConverter` is now the only path: non-generic BCL calls,
+range-checked, fractional numbers rejected for integral members, plus `Guid`/`TimeSpan`/`DateTime`/
+`DateTimeOffset`/`Uri`/`Version` from strings and a public parser registry (`TemplateValueParsers`) for everything
+else. One dependency (and `Microsoft.Extensions.Options`/`Primitives` with it) gone.
 
-## RoguelikeToolkit.Scripts — replaced by `RoguelikeToolkit.Entities.Scripting`
+## RoguelikeToolkit.Dice — replaced by the built-in `Dice` (6.0)
+
+ANTLR4 runtime + Troschuetz.Random for a grammar that fits in a few hundred lines of recursive descent. The old package
+also rolled `1..sides-1` (exclusive upper bound: a d6 never rolled 6), shared one lexer/parser across threads, and
+leaked an error listener per strict parse. The built-in parser compiles to a postfix program once; rolling is
+allocation-free.
+
+## Jint — split into `RoguelikeToolkit.Entities.Scripting.Jint` (6.0)
+
+Scripting is optional; Jint + Acornima are ~3 MB and a version every Unity project has to agree on. The core package
+now knows nothing about scripts: script types register their template parsers through `TemplateValueParsers`
+(`EntityScripting.Register()`), and script interop uses the public `EntityComponentExtensions` (type-based component
+access) instead of internals. Registration is explicit: module initializers / static constructors are fragile
+under IL2CPP and trimming, and a missing registration fails loudly at the first spawn.
+
+## RoguelikeToolkit.Scripts — replaced by `RoguelikeToolkit.Entities.Scripting.Jint`
 
 The package (archived upstream, Jint 3 beta) created a Jint `Engine` per script instance, and the factory created a
 script instance per spawned entity: ~53 µs and ~21 KB per entity per script member before anything ran. Extra arguments
@@ -43,11 +62,12 @@ managed regardless. The stdlib pool is already fixed (`using` + `Clear` on retur
 rents nothing per spawn, so there is no measured GC pressure to remove. Revisit only with spawn-loop
 profiling that shows buffer allocation as the bottleneck.
 
-## Pools — stdlib first (done)
+## Pools — internal (6.0)
 
-All pooling goes through `Microsoft.Extensions.ObjectPool` (`DefaultObjectPoolProvider` via
-`ObjectPoolProvider`; one custom `ThreadSafeObjectPoolPolicy` for entity buffers). No custom
-pool framework.
+`Microsoft.Extensions.ObjectPool` was used for four static pools of traversal buffers. One of them wrapped a custom
+policy holding its own unbounded `ConcurrentQueue`, so it never actually bounded retention. Replaced by `Pool<T>`
+(~60 lines): one fast slot plus a fixed slot array (2 x processors), each claimed by a single `CompareExchange`, no
+locks, no allocation in steady state, overflow dropped for the GC. The dependency is gone.
 
 ## Memory-mapped / native JSON — last, and packed-first
 

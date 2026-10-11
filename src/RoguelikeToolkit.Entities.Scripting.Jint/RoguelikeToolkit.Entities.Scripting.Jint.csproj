@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;netstandard2.1</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Description>Jint (JavaScript) scripts for RoguelikeToolkit.Entities templates: pre-parsed, shared, AOT-safe script components.</Description>
+    <PackageTags>roguelike;ecs;defaultecs;entities;templates;jint;scripting</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- trimming annotations / init accessors on netstandard2.1 (Unity): the same internal polyfills core compiles in -->
+    <Compile Include="..\RoguelikeToolkit.Entities\DynamicDependencyPolyfill.cs" Link="Polyfills\DynamicDependencyPolyfill.cs" />
+    <Compile Include="..\RoguelikeToolkit.Entities\DynamicallyAccessedMembersPolyfill.cs" Link="Polyfills\DynamicallyAccessedMembersPolyfill.cs" />
+    <Compile Include="..\RoguelikeToolkit.Entities\IsExternalInitPolyfill.cs" Link="Polyfills\IsExternalInitPolyfill.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Jint" Version="4.16.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RoguelikeToolkit.Entities\RoguelikeToolkit.Entities.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.401" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="SIL.ReleaseTasks" Version="3.0.0" />
+    <PackageReference Update="StyleCop.Analyzers.Unstable" Version="1.2.0.556" />
+  </ItemGroup>
+
+</Project>

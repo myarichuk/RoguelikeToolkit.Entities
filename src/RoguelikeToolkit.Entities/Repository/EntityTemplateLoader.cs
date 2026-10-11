@@ -1,7 +1,6 @@
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Security;
-using deniszykov.TypeConversion;
-using Microsoft.Extensions.Options;
 using RoguelikeToolkit.Entities.Exceptions;
 using YamlDotNet.Serialization;
 
@@ -12,8 +11,6 @@ namespace RoguelikeToolkit.Entities.Repository;
 /// </summary>
 internal class EntityTemplateLoader
 {
-    private static readonly TypeConversionProvider TypeConversionProvider = Factory.TypeConversionProviderFactory.Create();
-
     private readonly IDeserializer _deserializer = new DeserializerBuilder()
         .WithObjectFactory(new AotSafeYamlObjectFactory())
         .IgnoreUnmatchedProperties()
@@ -156,7 +153,7 @@ internal class EntityTemplateLoader
                     string componentName;
                     try
                     {
-                        componentName = TypeConversionProvider.ConvertToString(kvp.Key);
+                        componentName = KeyToString(kvp.Key);
                     }
                     catch (Exception e)
                     {
@@ -179,6 +176,10 @@ internal class EntityTemplateLoader
 
         return true;
     }
+
+    // YAML mapping keys arrive as strings, or as numbers/booleans for unquoted scalars; never null (Dictionary keys).
+    private static string KeyToString(object key) =>
+        Convert.ToString(key, CultureInfo.InvariantCulture) ?? string.Empty;
 
     private static bool IsRefMetaProperty(string key) =>
         key.Equals("$ref", StringComparison.InvariantCultureIgnoreCase);
@@ -332,7 +333,7 @@ internal class EntityTemplateLoader
         try
         {
             convertedTemplateData = rawTemplateData.ToDictionary(
-                valuePair => TypeConversionProvider.ConvertToString(valuePair.Key), valuePair => valuePair.Value);
+                valuePair => KeyToString(valuePair.Key), valuePair => valuePair.Value);
         }
         catch (ArgumentException e)
         {
