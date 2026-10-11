@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using deniszykov.TypeConversion;
 using Microsoft.Extensions.Options;
-using RoguelikeToolkit.DiceExpression;
 using RoguelikeToolkit.Entities.Components;
 using RoguelikeToolkit.Entities.Extensions;
 using RoguelikeToolkit.Entities.Scripting;
@@ -30,7 +29,7 @@ internal class ComponentFactory
     private static readonly IReadOnlyDictionary<Type, Func<string, object>> StringConverters =
         new Dictionary<Type, Func<string, object>>
         {
-            [typeof(Dice)] = static src => DiceParseCache.GetOrAdd(src, static s => Dice.Parse(s, true)),
+            [typeof(Dice)] = static src => DiceParseCache.GetOrAdd(src, static s => Dice.Parse(s)),
             [typeof(EntityScript)] = static src => SharedScript(src, static s => new EntityScript(s)),
             [typeof(EntityComponentScript)] = static src => SharedScript(src, static s => new EntityComponentScript(s)),
             [typeof(EntityInteractionScript)] = static src => SharedScript(src, static s => new EntityInteractionScript(s)),
@@ -45,7 +44,7 @@ internal class ComponentFactory
             var provider = TypeConversionProviderFactory.Create();
             provider.RegisterConversion<string, Dice>(
                 (src, _, __) =>
-                    DiceParseCache.GetOrAdd(src, static s => Dice.Parse(s, true)),
+                    DiceParseCache.GetOrAdd(src, static s => Dice.Parse(s)),
                 ConversionQuality.Custom);
 
             provider.RegisterConversion<string, EntityScript>(

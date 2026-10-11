@@ -28,7 +28,6 @@
     "org.nuget.deniszykov.typeconversion": "3.2.4",
     "org.nuget.jint": "4.16.2",
     "org.nuget.microsoft.extensions.objectpool": "10.0.5",
-    "org.nuget.rogueliketoolkit.dice": "1.0.4",
     "org.nuget.yamldotnet": "18.1.0"
   }
 }

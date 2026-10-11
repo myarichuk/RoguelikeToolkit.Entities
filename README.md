@@ -20,7 +20,7 @@ Targets `net10.0` and `netstandard2.1` (Unity 2021.3+, IL2CPP-safe). MIT.
 - **Inheritance:** Templates can inherit from one or more base templates, mixing components and tags together.
 - **Embedded templates:** Hierarchies are fully supported, you can embed child entities inside templates.
 - **Scripts:** Components can carry JavaScript (Jint) scripts for data-driven behavior; parsed once, shared, AOT-safe.
-- **Dice parsing:** The system seamlessly creates component variables from standard dice notations (`2d6+3`).
+- **Dice:** `Dice`-typed component members are parsed from dice notation (`2d6+3`, `4d6k3`); built in, no extra dependencies.
 
 ## Quick Start
 
@@ -128,6 +128,29 @@ for (var i = 0; i < 2000; i++)
 Global components are first-write-wins: the first spawned entity sets the world's
 shared copy, later spawns link to it. Dice strings (`"1d4"`) share one parse per
 distinct expression; scripts likewise share one parsed, immutable instance per distinct source.
+
+### Dice
+
+`Dice` (namespace `RoguelikeToolkit.Entities`) members are populated from template strings, or parse one directly:
+
+```csharp
+var damage = Dice.Parse("2d6+3");
+damage.Roll();                  // thread-local random source
+damage.Roll(new Random(seed));  // reproducible rolls (replays, tests)
+Dice.TryParse(text, out var d); // no exceptions on bad input
+```
+
+| Syntax | Meaning |
+| --- | --- |
+| `NdS`, `dS` | N dice with S sides (N defaults to 1); each die rolls 1..S inclusive |
+| `d%`, `Nd%` | percentile dice (S = 100) |
+| `NdSkK`, `NdSkhK` | roll N, keep the K highest |
+| `NdSklK` | roll N, keep the K lowest |
+| `NkK` | roll-and-keep shorthand: N d10, keep the K highest |
+| `+ - * /`, `( )`, unary `-` | integer arithmetic; `/` truncates toward zero; overflow throws |
+
+Case-insensitive, whitespace ignored. Bounds: at most 1000 dice per term, 1,000,000 sides. Expressions are compiled
+once to a flat postfix program; rolling is allocation-free in steady state and instances are safe to share across threads.
 
 ### Scripts
 
