@@ -1,0 +1,34 @@
+{
+  "name": "com.rogueliketoolkit.entities",
+  "displayName": "RoguelikeToolkit Entities",
+  "version": "0.0.0",
+  "unity": "2021.3",
+  "description": "Data-driven entity templates (YAML/JSON) for DefaultEcs: inheritance, embedded child entities, dice components and shared Jint scripts. IL2CPP-safe netstandard2.1 build.",
+  "license": "MIT",
+  "author": {
+    "name": "Michael Yarichuk"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/myarichuk/RoguelikeToolkit.Entities.git"
+  },
+  "documentationUrl": "https://github.com/myarichuk/RoguelikeToolkit.Entities#readme",
+  "changelogUrl": "https://github.com/myarichuk/RoguelikeToolkit.Entities/blob/main/CHANGELOG.md",
+  "licensesUrl": "https://github.com/myarichuk/RoguelikeToolkit.Entities/blob/main/LICENSE",
+  "keywords": [
+    "ecs",
+    "entities",
+    "templates",
+    "roguelike",
+    "defaultecs",
+    "jint"
+  ],
+  "dependencies": {
+    "org.nuget.defaultecs": "0.17.2",
+    "org.nuget.deniszykov.typeconversion": "3.2.4",
+    "org.nuget.jint": "4.16.2",
+    "org.nuget.microsoft.extensions.objectpool": "10.0.5",
+    "org.nuget.rogueliketoolkit.dice": "1.0.4",
+    "org.nuget.yamldotnet": "18.1.0"
+  }
+}
