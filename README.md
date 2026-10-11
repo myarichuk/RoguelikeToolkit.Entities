@@ -1,9 +1,18 @@
-# RoguelikeTools.Entities
+# RoguelikeToolkit.Entities
 
-This is a library to allow resolve entity templates for Entity Component System in a similar way [Ultimate Adom](https://www.ultimate-adom.com/index.php/2018/10/25/making-ultimate-adom-moddable-by-using-entity-component-systems/) is doing.
+[![NuGet](https://img.shields.io/nuget/v/RoguelikeToolkit.Entities.svg)](https://www.nuget.org/packages/RoguelikeToolkit.Entities)
+[![openupm](https://img.shields.io/npm/v/com.rogueliketoolkit.entities?label=openupm&registry_uri=https://package.openupm.com)](https://openupm.com/packages/com.rogueliketoolkit.entities/)
 
-Supports entity template inheritance and creation of entity hierarchies.  
-It is using the awesome [DefaultEcs](https://github.com/Doraku/DefaultEcs) library to construct the entities.
+Data-driven entity templates for [DefaultEcs](https://github.com/Doraku/DefaultEcs), in the spirit of
+[Ultimate ADOM's moddable ECS](https://www.ultimate-adom.com/index.php/2018/10/25/making-ultimate-adom-moddable-by-using-entity-component-systems/):
+describe entities in YAML/JSON, inherit and compose them, spawn them into a `DefaultEcs.World`.
+
+Targets `net10.0` and `netstandard2.1` (Unity 2021.3+, IL2CPP-safe). MIT.
+
+## Install
+
+- **.NET:** `dotnet add package RoguelikeToolkit.Entities`
+- **Unity:** see [Unity / IL2CPP](#unity--il2cpp).
 
 ## Features
 
@@ -207,24 +216,62 @@ referencing file's directory.
 
 ## Unity / IL2CPP
 
-The `netstandard2.1` build has no Reflection.Emit on the load/spawn path, so it runs under IL2CPP.
-CI publishes a NativeAOT smoke test (stricter than IL2CPP: no JIT, no runtime generic instantiation) to keep it that way.
+The `netstandard2.1` build has no Reflection.Emit on the load/spawn path and no `dynamic`, so it runs under IL2CPP.
+CI runs a NativeAOT smoke test (stricter than IL2CPP: no JIT, no runtime generic instantiation, full trimming) on
+every PR to keep it that way.
+
+### Install
+
+The UPM package `com.rogueliketoolkit.entities` ships the prebuilt `netstandard2.1` DLL. Its third-party
+dependencies (DefaultEcs, YamlDotNet, Jint, ...) come from [UnityNuGet](https://github.com/bdovaz/UnityNuGet)
+as `org.nuget.*` packages instead of being bundled: Unity refuses two copies of the same DLL, and Jint/YamlDotNet
+are shared with `RoguelikeToolkit.World`. Add both scoped registries to `Packages/manifest.json`:
+
+```json
+{
+  "scopedRegistries": [
+    {
+      "name": "OpenUPM",
+      "url": "https://package.openupm.com",
+      "scopes": ["com.rogueliketoolkit"]
+    },
+    {
+      "name": "UnityNuGet",
+      "url": "https://unitynuget-registry.openupm.com",
+      "scopes": ["org.nuget"]
+    }
+  ],
+  "dependencies": {
+    "com.rogueliketoolkit.entities": "5.1.0"
+  }
+}
+```
+
+(`openupm add com.rogueliketoolkit.entities` does the OpenUPM half.)
+
+**Without registries:** every GitHub Release also carries `RoguelikeToolkit.Entities-<version>-unity-plugins.zip`
+with the whole DLL closure plus a `link.xml`. Unzip into `Assets/Plugins/RoguelikeToolkit.Entities/`, skipping any DLL
+your project already has (`System.Runtime.CompilerServices.Unsafe` often is).
+
+### Runtime notes
 
 - **Unity 2022.1+:** works as is.
-- **Stricter AOT (NativeAOT, older IL2CPP):** register each component type once at startup so its closed generic code exists:
+- **Older IL2CPP / NativeAOT:** register each component type once at startup so its closed generic code exists:
   `AotComponentRegistry.Register<Health>();`
-- **Managed code stripping:** component types (and the types of their nested struct/class members) are populated through
-  reflection only. Keep them from being stripped with `[Preserve]` or a `link.xml`:
+- **Managed code stripping:** the package hands UnityLinker its own `link.xml` (an editor hook; Unity ignores
+  `link.xml` files inside packages), preserving this library, DefaultEcs, YamlDotNet, TypeConversion and Jint. Your
+  component types (and the types of their nested struct/class members) are populated by reflection only, so they
+  need `[Preserve]` or a `link.xml` of your own under `Assets/`:
 
   ```xml
   <linker>
     <assembly fullname="MyGame.Components" preserve="all" />
   </linker>
   ```
-- **Scripts:** Jint is a pure managed interpreter (no IL emission); arguments are marshalled without `dynamic`. Script
-  interop reaches your component types by reflection, so they need the same stripping protection as above. Leave
-  `ScriptHostOptions.MemoryLimitBytes` off on IL2CPP (it polls `GC.GetAllocatedBytesForCurrentThread` per statement).
-  Jint is pinned to the version `RoguelikeToolkit.World.Scripting.Jint` uses: a Unity project can only hold one.
+- **Scripts:** Jint is a pure managed interpreter (no IL emission). Script interop reaches your component types by
+  reflection, so they need the same stripping protection. Leave `ScriptHostOptions.MemoryLimitBytes` off on IL2CPP
+  (Jint polls `GC.GetAllocatedBytesForCurrentThread` per statement). Jint is pinned to the version
+  `RoguelikeToolkit.World.Scripting.Jint` uses: a Unity project can only hold one.
 
 ## Docs
 
@@ -256,3 +303,11 @@ spawn rows are per 100-entity batch, resolve rows per single cold resolve + 1 sp
 | `Spawn_Simple` | 6.84 ms | 1.30 MB |
 | `Spawn_WithEmbedded` | 5.40 ms | 1.20 MB |
 | `Spawn_ManyComponents` | 13.00 ms | 2.12 MB |
+
+## Releases
+
+Merging a PR into `main` computes the next version from conventional commits (GitVersion: `feat` minor, `fix`/others
+patch, `!`/`BREAKING CHANGE` major), tags `vX.Y.Z`, writes the GitHub Release and publishes the NuGet package plus the
+UPM tarball and plugins zip (`tools/upm/pack.py`, template in `upm/com.rogueliketoolkit.entities`) as release assets,
+which OpenUPM picks up.
+

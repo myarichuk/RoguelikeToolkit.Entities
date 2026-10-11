@@ -42,20 +42,25 @@ jobs:
         run: dotnet build --configuration Release /p:CI=true /p:Version=${{ steps.gitversion.outputs.AssemblySemVer }} /p:AssemblyVersion=${{ steps.gitversion.outputs.AssemblySemVer }} /p:FileVersion=${{ steps.gitversion.outputs.assemblySemFileVer }} /p:InformationalVersion=${{ steps.gitversion.outputs.InformationalVersion }} --no-restore /bl:"${{ runner.temp }}/_artifacts/build_logs/build.binlog"
       - name: Test
         run: dotnet test --configuration Release /p:Version=${{ steps.gitversion.outputs.AssemblySemVer }} /p:AssemblyVersion=${{ steps.gitversion.outputs.AssemblySemVer }} /p:FileVersion=${{ steps.gitversion.outputs.assemblySemFileVer }} --no-build --verbosity normal
+      # Tags are plain semver (v5.1.0): UPM/OpenUPM reject 4-part versions. Assemblies keep AssemblySemVer.
       - uses: rickstaa/action-create-tag@v1
         with:
-          tag: v${{ steps.gitversion.outputs.AssemblySemVer }}
+          tag: v${{ steps.gitversion.outputs.MajorMinorPatch }}
     outputs:
-      tag: v${{ steps.gitversion.outputs.AssemblySemVer }}
-      version: ${{ steps.gitversion.outputs.AssemblySemVer }}
+      tag: v${{ steps.gitversion.outputs.MajorMinorPatch }}
+      version: ${{ steps.gitversion.outputs.MajorMinorPatch }}
 
   changelog-release:
     name: Update Changelog & Release
     runs-on: ubuntu-latest
     needs: [build-and-pack]
     steps:
+      # Check out the base branch: on pull_request events the default checkout is the PR merge ref, and the
+      # auto-commit below would push CHANGELOG.md to the (already merged) PR head branch instead of main.
       - name: Git Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
       - name: Update CHANGELOG
         id: changelog
         uses: Requarks/changelog-action@v1
@@ -78,7 +83,7 @@ jobs:
           commit_message: 'docs: update CHANGELOG.md for ${{needs.build-and-pack.outputs.tag}}'
           file_pattern: CHANGELOG.md
     outputs:
-      tag: v${{ needs.build-and-pack.outputs.tag }}
+      tag: ${{ needs.build-and-pack.outputs.tag }}
       version: ${{ needs.build-and-pack.outputs.version }}
 
   publish-nuget:
@@ -96,3 +101,44 @@ jobs:
         run: dotnet pack --configuration release /p:CI=true -o:package /p:AssemblyVersion=${{needs.changelog-release.outputs.version}} /p:Version=${{needs.changelog-release.outputs.version}} /p:PackageVersion=${{needs.changelog-release.outputs.version}}
       - name: Publish to NuGet
         run: dotnet nuget push ./package/*.nupkg  -s https://api.nuget.org/v3/index.json  -k ${{ secrets.NUGET_TOKEN }}
+
+  publish-upm:
+    # Binary UPM package (netstandard2.1 DLL + metas + link.xml hook) attached to the GitHub Release; OpenUPM tracks
+    # release assets named com.rogueliketoolkit.entities-*.tgz. The plugins zip is the no-registry fallback
+    # (whole DLL closure for Assets/Plugins). Asset names must not share the tarball prefix.
+    name: Publish (UPM)
+    runs-on: ubuntu-latest
+    needs: [changelog-release]
+    permissions:
+      contents: write
+    steps:
+      - name: Setup .NET tooling
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Git Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.changelog-release.outputs.tag }}
+      - name: Pack UPM tarball
+        run: >
+          python3 tools/upm/pack.py package
+          --package upm/com.rogueliketoolkit.entities
+          --version ${{ needs.changelog-release.outputs.version }}
+          --project src/RoguelikeToolkit.Entities/RoguelikeToolkit.Entities.csproj
+          --out upm-dist
+      - name: Pack plugins zip
+        run: >
+          python3 tools/upm/pack.py plugins
+          --version ${{ needs.changelog-release.outputs.version }}
+          --project src/RoguelikeToolkit.Entities/RoguelikeToolkit.Entities.csproj
+          --link-xml upm/com.rogueliketoolkit.entities/Runtime/link.xml
+          --out upm-dist/RoguelikeToolkit.Entities-${{ needs.changelog-release.outputs.version }}-unity-plugins.zip
+      - name: Attach to release
+        run: gh release upload "${{ needs.changelog-release.outputs.tag }}" upm-dist/*.tgz upm-dist/*.zip --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}

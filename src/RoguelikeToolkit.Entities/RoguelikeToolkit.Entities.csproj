@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="DefaultEcs" Version="*" />
+    <PackageReference Include="DefaultEcs" Version="0.17.2" />
     <PackageReference Include="deniszykov.TypeConversion" Version="3.2.4" />
     <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="10.0.5" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />

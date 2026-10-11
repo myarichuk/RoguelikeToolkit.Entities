@@ -5,7 +5,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-### :boom: Breaking Changes
+### :sparkles: New Features
+- Unity package `com.rogueliketoolkit.entities` (OpenUPM): prebuilt `netstandard2.1` DLL, dependencies from UnityNuGet (`org.nuget.*`), and an editor hook that hands the package's `link.xml` to UnityLinker. Every release also attaches a `-unity-plugins.zip` with the full DLL closure.
+- Release tags are plain semver (`v5.1.0`; previously `v5.0.0.0`): UPM/OpenUPM reject 4-part versions. Assembly versions are unchanged.
+
+### :bug: Bug Fixes
+- `DefaultEcs` was referenced with a floating `*` version; pinned to `0.17.2`.
+- `Microsoft.SourceLink.GitHub` leaked `System.IO.Hashing` into the netstandard2.1 runtime closure; its runtime assets are now excluded.
+
+## [v5.0.0.0] - 2026-10-11
+### :boom: BREAKING CHANGES
+- due to [`6df8207`](https://github.com/myarichuk/RoguelikeToolkit.Entities/commit/6df820746b9a3fae122270df5aa712dfb1453eed) - replace RoguelikeToolkit.Scripts with in-repo AOT-safe Jint scripting *(commit by [@claude](https://github.com/claude))*:
+
+  RoguelikeToolkit.Scripts types move to  
+  RoguelikeToolkit.Entities.Scripting; script constructors take only the  
+  source (reference types move to ScriptHostOptions.ReferenceTypes); every  
+  execution takes a ScriptHost first; arguments are (string, object?) instead  
+  of (string, dynamic); EntityComponentScript.TryExecuteOn takes the entity by  
+  `in`; scripts are stateless and shared between entities spawned from the same  
+  template, so top-level vars no longer persist between executions.
+
+
+### :sparkles: New Features
+- [`8bccc3d`](https://github.com/myarichuk/RoguelikeToolkit.Entities/commit/8bccc3db966b81743a8f2d89d3a6f52bc972ac1d) - run under Unity IL2CPP / AOT (no runtime IL emission on load/spawn path) *(commit by [@claude](https://github.com/claude))*
+- [`6df8207`](https://github.com/myarichuk/RoguelikeToolkit.Entities/commit/6df820746b9a3fae122270df5aa712dfb1453eed) - replace RoguelikeToolkit.Scripts with in-repo AOT-safe Jint scripting *(commit by [@claude](https://github.com/claude))*
+
+
+### Details
+#### :boom: Breaking Changes
 - The `RoguelikeToolkit.Scripts` dependency is replaced by `RoguelikeToolkit.Entities.Scripting` (Jint 4.16.2):
   - namespace `RoguelikeToolkit.Scripts` -> `RoguelikeToolkit.Entities.Scripting`;
   - script constructors take only the source (reference types moved to `ScriptHostOptions.ReferenceTypes`);
@@ -15,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - scripts are stateless and shared between entities spawned from the same template: top-level `var`s no longer
     persist between executions (state belongs in components).
 
-### :sparkles: Features
+#### :sparkles: Features
 - `EntityTemplate.Copy()` creates an editable, unshared variant of a template ("different mobs").
 - `EntityTemplateRepository.AddTemplate` stores a defensive copy (clone-on-write at the ownership boundary).
 - `EntityTemplateRepository.RemoveTemplate` removes a template together with its tag index entries.
@@ -27,11 +54,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ScriptHost` / `ScriptHostOptions`: one reusable Jint engine with statement, recursion, timeout and (opt-in) memory limits; per-execution function scope and binding cleanup.
 - Scripts can use `entity.HasComponent/GetComponent/SetComponent/RemoveComponent(Type)` (exposed types via `ScriptHostOptions.ReferenceTypes`); never worked with the old package.
 
-### :zap: Performance
+#### :zap: Performance
 - Spawning is 6-40x faster with 5-8x less allocation (Spawn_Simple 11.5 ms -> 0.87 ms per 100 entities, 1.28 MB -> 163 KB; same machine, BenchmarkDotNet short job) from dropping per-type IL generation and `MethodInfo.Invoke` on the hot path.
 - Script members cost nothing per spawn (shared instance; previously a new Jint engine per entity: ~53 µs, ~21 KB). Executing with an argument: 15.8 µs -> 6.2 µs.
 
-### :bug: Fixes
+#### :bug: Fixes
 - `EntityExtensions` child iterator no longer leaks pooled traversal state between calls; tagless entities share an immutable empty tag set; parent-link bookkeeping is thread-safe.
 - `GlobalComponentInEntitySetter` actually validates the resolved `SetSameAsWorld` method and warns when a later global value is ignored (first write wins).
 - Folder loads stay atomic under racing loads (conflicting batch is rolled back, duplicate raises).
@@ -81,3 +108,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [v4.0.3.0]: https://github.com/myarichuk/RoguelikeToolkit.Entities/compare/v4.0.2.0...v4.0.3.0
 [v4.0.4.0]: https://github.com/myarichuk/RoguelikeToolkit.Entities/compare/v4.0.3.0...v4.0.4.0
 [v4.0.6.0]: https://github.com/myarichuk/RoguelikeToolkit.Entities/compare/v4.0.4.0...v4.0.6.0
+[v5.0.0.0]: https://github.com/myarichuk/RoguelikeToolkit.Entities/compare/v4.2.2.0...v5.0.0.0
