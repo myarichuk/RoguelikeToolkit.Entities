@@ -9,3 +9,9 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
+    # GitVersion and the changelog action only understand Conventional Commits; Dependabot's default
+    # "Bump X from a to b" matches neither, so merging its PRs failed the release run.
+    commit-message:
+      prefix: "fix"
+      prefix-development: "chore"
+      include: "scope"
