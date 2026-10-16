@@ -96,6 +96,11 @@ jobs:
     name: Publish (NuGet)
     runs-on: ubuntu-latest
     needs: [changelog-release]
+    # Trusted publishing (OIDC): no long-lived API key. nuget.org must have a trusted publisher policy for this
+    # repository and workflow file (on-merge-pr.yml); NuGet/login exchanges the job's OIDC token for a short-lived key.
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - name: Setup .NET tooling
         uses: actions/setup-dotnet@v4
@@ -103,10 +108,18 @@ jobs:
           dotnet-version: 10.0.x
       - name: Git Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.changelog-release.outputs.tag }}
       - name: Pack NuGet
         run: dotnet pack --configuration release /p:CI=true -o:package /p:AssemblyVersion=${{needs.changelog-release.outputs.version}} /p:Version=${{needs.changelog-release.outputs.version}} /p:PackageVersion=${{needs.changelog-release.outputs.version}}
+      - name: NuGet login (OIDC)
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+      # --skip-duplicate: re-running the job after a partial publish must not fail on packages already pushed.
       - name: Publish to NuGet
-        run: dotnet nuget push ./package/*.nupkg  -s https://api.nuget.org/v3/index.json  -k ${{ secrets.NUGET_TOKEN }}
+        run: dotnet nuget push "./package/*.nupkg" -s https://api.nuget.org/v3/index.json -k "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" --skip-duplicate
 
   publish-upm:
     # Binary UPM packages (netstandard2.1 DLL + metas + link.xml hook) attached to the GitHub Release; OpenUPM tracks
