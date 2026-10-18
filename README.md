@@ -329,6 +329,7 @@ your project already has (`System.Runtime.CompilerServices.Unsafe` often is).
 
 ## Docs
 
+- [Wiki](https://github.com/myarichuk/RoguelikeToolkit.Entities/wiki) — getting started, template reference, Unity guide, recipes, troubleshooting.
 - [Usage guide](docs/usage.md) — querying, spawning, pooling, save/load, modding, examples.
 - [Architecture](docs/architecture.md) — internal creation and inheritance flow.
 - [Integration decisions](docs/integrations.md) — why each dependency / perf choice stands.
